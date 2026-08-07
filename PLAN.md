@@ -1,0 +1,461 @@
+# Control Tower — Plan
+
+A desktop dashboard for in-flight Claude Code sessions. Named for the job it does:
+you have many sessions taking off, circling, and landing — this is the overview that
+keeps them all moving.
+
+Sibling in spirit to [new-day](https://github.com/cannuk/new-day): the same idea that you
+can switch the whole look at runtime, same personal-project posture. Nothing else is
+inherited from it — the stack below is chosen on merit, not for parity.
+
+---
+
+## 1. Stack
+
+Versions are the current latest, checked against npm rather than assumed.
+
+| Layer | Choice | Why |
+|---|---|---|
+| Shell | **Electron 43** | The Node answer for desktop. Main process gets real `fs`/`child_process`, which this app is entirely built on. Tauri would mean Rust. |
+| Build | **electron-vite 5** | Current best DX for Electron+Vite: one config for main/preload/renderer, HMR on the renderer, `import.meta.env`. Lighter than Forge's plugin. |
+| Package | **electron-builder** | DMG + auto-update later if wanted. |
+| UI | **React 19.2 + TypeScript 5.8** | 19 is the current major — there is no React 20. Not chosen for parity with new-day, which is still on React 18. |
+| UI kit | **shadcn/ui + Radix** on **Tailwind 4.3** — see §3 | Radix gives real a11y and full density control; themes are our own CSS-variable sets. |
+| State | **Zustand 5** | New-day uses Redux Toolkit, but this app's state is one pushed snapshot. RTK is overkill; Zustand is ~1KB and reads cleanly. |
+| Local store | **SQLite (better-sqlite3)** — see §4 | The takeoff queue is authored state, and the caches want indexed reads. |
+| Lint | eslint + prettier + husky + lint-staged | Same as new-day. |
+
+Deliberately **not** using: a backend service, or auth (single-user, local).
+
+---
+
+## 2. Where the data comes from
+
+Four independent local sources, joined on the Claude `sessionId`.
+
+### 2.1 Session registry — liveness and status
+`~/.claude/sessions/{pid}.json`, one file per running CLI:
+
+```json
+{"pid":83534,"sessionId":"7f93a14d-…","cwd":"…/chat-sdk",
+ "startedAt":1786109703546,"procStart":"Fri Aug  7 13:35:00 2026",
+ "version":"2.1.224","entrypoint":"cli","kind":"interactive",
+ "name":"chat-sdk-1f","nameSource":"derived",
+ "status":"busy","updatedAt":1786111465851,"statusUpdatedAt":1786111465851}
+```
+
+- `status` is `busy` | `idle` — a real heartbeat, far better than file mtime.
+- Entries are **not** cleaned up reliably; verify each `pid` still belongs to a `claude`
+  process before trusting it. `procStart` is the PID-recycling guard — but note it is
+  rendered in **UTC** while `ps -o lstart=` is **local**, so compare `startedAt` (epoch ms)
+  instead. Naive string comparison silently reports zero live sessions.
+- `entrypoint: claude-vscode` entries carry **no** `status` field. Fall back to mtime.
+- `sessionId` here is the session at *process start* and can drift after `/clear`. Prefer
+  the terminal provider's value (§2.3) and validate that a transcript exists.
+
+### 2.2 Transcripts — last interaction and PR links
+`~/.claude/projects/{mangled-cwd}/{sessionId}.jsonl`
+
+- **Last interaction** = file mtime. This is the sort key for the active list.
+- **PR links** are first-class records on their own line:
+  ```json
+  {"type":"pr-link","sessionId":"…","prNumber":2520,
+   "prUrl":"https://github.com/sagansystems/chat-sdk/pull/2520",
+   "prRepository":"sagansystems/chat-sdk","timestamp":"2026-08-01T01:25:02.899Z"}
+  ```
+  Written on `gh pr create` and on later REST linking. Mapping is many-to-many: one PR can
+  have several sessions, one session several PRs.
+- Folder names are lossy (`_` and `/` both become `-`). Resolve the real cwd by preferring
+  a folder name that verifiably exists, then the `cwd` field inside the JSONL.
+- Files reach 20MB+. **Never full-read.** Cache `{mtime, size, lastByteOffset}` per file
+  and parse only the appended tail — JSONL is append-only.
+
+### 2.3 Terminal provider — the summary and the focus verb
+Claude Code does **not** store a semantic summary. Verified: zero `{"type":"summary"}`
+records across 107 transcripts; `sessions-index.json` has the field but is dead (v1, last
+written in January, zero populated); the registry's `name` is cwd-derived (`chat-sdk-1f`).
+
+The summary belongs to the terminal. For cmux it comes from its `hooks claude auto-name`
+hook (a `Stop` hook with a 120s timeout — it's an LLM call).
+
+**cmux exposes a complete Unix-socket control API**, and `surface.list` gives us
+everything in one call:
+
+```jsonc
+{ "id": "D1FA9BC1-…", "ref": "surface:43", "focused": true,
+  "title": "⠐ Check new day skill status",          // the summary (strip leading glyph)
+  "requested_working_directory": "…/chat-sdk",
+  "pane_id": "…", "pane_ref": "pane:19",
+  "resume_binding": {
+    "kind": "claude",                                // discriminator: claude|codex|opencode
+    "checkpoint_id": "7f93a14d-…",                   // ← the Claude sessionId
+    "command": "… claude --resume 7f93a14d-… --permission-mode auto",
+    "approval_policy": "auto", "cwd": "…" } }
+```
+
+Focus is `surface.focus` (CLI: `cmux focus-panel` / `tab-action`). `cmux events --reconnect`
+is a push event stream, so cmux state needs no polling at all.
+
+### 2.4 GitHub — PR state
+Via the `gh` CLI (already authenticated as `cannuk`, and that account can read the
+`sagansystems` repos — verified). Shelling out to `gh` avoids storing a token.
+
+One GraphQL query per repo, batching all PR numbers that appear in the session list, with a
+fragment per PR pulling `state`, `isDraft`, `reviewDecision`, `statusCheckRollup.state`, and
+`reviewThreads(first:100){ nodes{ isResolved isOutdated } }`.
+
+`mergeStateStatus` is deliberately **not** used: GitHub computes it lazily and returns
+`UNKNOWN` on a cold query (observed on #2545), so it would need a retry loop to be
+meaningful. The four fields above are always populated.
+
+### 2.5 Summaries — generated by Control Tower, not read from a provider
+See §8. The provider title is the fast path, not the mechanism.
+
+---
+
+## 3. Theming and component layer
+
+**Decided: shadcn/ui + Radix on Tailwind 4.** Not daisyUI, and not inherited from new-day.
+
+The requirement is *state of the art in theme and UX* with runtime switching. daisyUI is one
+answer to that — and still the strongest for many switchable themes at zero cost — but it was
+the wrong axis to optimize here:
+
+| | **shadcn/ui + Radix** (chosen) | daisyUI 5 |
+|---|---|---|
+| Themes out of the box | none — you define CSS-variable sets | 35, one `data-theme` attribute |
+| Component quality / a11y | Radix primitives: full keyboard, focus, and ARIA behavior, unstyled | class-based, moderate control |
+| Density control for a dashboard | complete — you own every style | fighting framework defaults |
+| Effort to first screen | moderate | very low |
+
+A dense, glanceable dashboard lives on component quality and information density, and this
+gives full control of both. The two **cannot be combined** — each owns the Tailwind token
+layer — so this is a one-way door, taken deliberately.
+
+### Theme system
+
+Since shadcn ships no themes, Control Tower defines its own — which is the point of the New
+Day comparison anyway: what carried over is *switching the whole look at runtime*, not a
+particular library's palette set.
+
+- Every color is a **CSS custom property on `:root`**, redefined per theme under a
+  `[data-theme="…"]` selector. Same switching mechanism as New Day, our own tokens.
+- Ship ~8 curated palettes rather than 35 canned ones, each a light/dark pair, generated and
+  then hand-tuned for a dashboard's contrast needs.
+- Semantic names, not literal ones: `--status-approved`, `--status-blocked`,
+  `--status-running`, `--surface`, `--surface-raised`, `--muted`. A theme swaps values; no
+  component knows a color name.
+
+Non-negotiable and unchanged: **status colors come from semantic tokens, never hex**, and every
+status carries an icon plus a tooltip so nothing depends on color alone. With hand-rolled
+tokens this needs a contrast check per palette, since no framework is guaranteeing it.
+
+---
+
+## 4. Local store — what SQLite is for
+
+Most state here is derived from disk and recomputable, so no database is needed for the live
+view. Four things are not derived:
+
+1. **The Ready for Takeoff queue** (§9, M8) — authored by you, exists nowhere else. This alone
+   requires durable storage.
+2. **Transcript parse cache** — `{path → mtime, size, lastByteOffset, extracted pr-links}`.
+   107 transcripts today, several over 20MB; indexed reads beat re-parsing a JSON blob as
+   this grows.
+3. **PR status + ETag cache** — survives restart, so launching doesn't burn GitHub rate
+   limit re-fetching what hasn't changed.
+4. **Session history** — the strongest reason. `~/.claude/sessions/{pid}.json` **is deleted
+   when a session exits**, and cmux's closed-item history is provider-specific and may
+   rotate. If Control Tower is to keep any durable record of past sessions — for the Recent
+   tab, or later for "how long do my sessions actually run" — its own store is the only
+   place that can live.
+
+**Not** in SQLite: the live session snapshot. That stays derived, in memory, rebuilt from the
+four sources on each watcher tick.
+
+**Which SQLite:** `node:sqlite` is built into Node (verified present in 23.11) and avoids
+native-module rebuilds entirely, but it is still flagged experimental and its availability
+depends on which Node version Electron bundles. So **better-sqlite3** with an
+`electron-rebuild` postinstall — stable, one line of config. Revisit `node:sqlite` once it is
+stable in Electron's Node, at which point the native dependency disappears.
+
+---
+
+## 5. The terminal provider abstraction
+
+The requirement: clicking a summary focuses the right tab, and switching terminal
+providers should "just work". Three layers, best-first — a provider implements as much as
+it can and the layers below cover the rest.
+
+```ts
+interface TerminalProvider {
+  id: string;                                   // 'cmux' | 'wezterm' | 'iterm2' | 'tmux' | …
+  detect(): Promise<boolean>;
+  /** Sessions this provider knows about, keyed by Claude sessionId. */
+  sessions(): Promise<Map<string, ProviderSession>>;
+  focus(target: ProviderSession): Promise<void>;
+  /** Optional: create a new session — powers "Ready for Takeoff". */
+  launch?(opts: { cwd: string; command?: string; name?: string }): Promise<void>;
+  /** Push updates instead of being polled. */
+  subscribe?(onChange: () => void): () => void;
+}
+
+interface ProviderSession {
+  sessionId: string;          // Claude sessionId
+  title: string | null;       // the semantic summary
+  handle: string;             // provider-native focus target (surface ref, pane id, …)
+  cwd?: string;
+  resumeCommand?: string;
+}
+```
+
+**Layer 1 — native store (best).** The provider tells us the sessionId directly. cmux does
+this via `resume_binding.checkpoint_id`. Exact, no heuristics, and it comes with the title
+and a focus verb.
+
+**Layer 2 — TTY derivation (generic fallback).** Works for *any* terminal, with no
+provider support at all. The controlling TTY is the universal join key:
+
+```
+registry pid 83534  →  ps -p 83534 -o tty=  →  ttys033
+```
+
+Verified: `ttys033` is exactly what cmux independently reports for that panel. Walk `ppid`
+up from the claude process to identify the terminal emulator, then focus by tty using
+whatever that emulator offers — `wezterm cli list --format json` + `activate-pane`,
+`tmux list-panes -a -F '#{pane_tty}'` + `select-pane`, AppleScript for iTerm2/Terminal.app,
+`kitty @ ls`. Each is ~20 lines.
+
+**Layer 3 — configured template.** Settings pane accepts a shell template with
+`{tty} {pid} {sessionId} {cwd}` placeholders. Escape hatch for anything unknown; also how
+a user overrides a misbehaving auto-detect.
+
+Resolution order at runtime: any provider that claims the sessionId in layer 1 wins;
+otherwise fall back to the tty match; otherwise the template; otherwise the row still
+renders with a copyable `claude --resume <id>` and no focus affordance.
+
+---
+
+## 6. PR status model
+
+**One badge is not enough.** Approval and unresolved discussion are independent axes, and
+live data confirms the trap — these are real open PRs right now:
+
+```
+PR     state  reviewDecision      CI        threads(unresolved/total)
+#2503  OPEN   APPROVED            SUCCESS   8/8      ← "approved, green" but 8 open threads
+#2538  OPEN   REVIEW_REQUIRED     SUCCESS   17/23
+#2453  OPEN   REVIEW_REQUIRED     SUCCESS   26/27
+#2545  OPEN   REVIEW_REQUIRED     FAILURE   3/3
+```
+
+So the model is a **primary status plus annotations**. The primary status answers "whose turn
+is it"; annotations answer "what else is outstanding".
+
+Primary status, first match wins:
+
+| # | Status | Condition | Icon |
+|---|---|---|---|
+| 1 | Merged | `state: MERGED` | merge arrow |
+| 2 | Closed | `state: CLOSED` | slashed circle |
+| 3 | Draft | `isDraft` | half circle |
+| 4 | CI failing | `statusCheckRollup: FAILURE / ERROR` | x-circle |
+| 5 | CI running | `statusCheckRollup: PENDING` | spinner (animated) |
+| 6 | Changes requested | `reviewDecision: CHANGES_REQUESTED` | comment-dots |
+| 7 | Approved | `reviewDecision: APPROVED` | check |
+| 8 | Waiting for review | `reviewDecision: REVIEW_REQUIRED` | eye |
+| 9 | Unknown | fetch failed | dash |
+
+Annotations, shown alongside and independent of the primary:
+
+| Annotation | Condition | Rendering |
+|---|---|---|
+| `N unresolved` | count of `reviewThreads.nodes` where `!isResolved` | count chip; muted when the primary is Merged or Closed |
+| `N outdated` | `!isResolved && isOutdated` | folded into the tooltip only — these are usually stale nits, not blockers |
+
+An approved PR with unresolved threads therefore reads **`✓ Approved · 8 unresolved`**, and
+only a genuinely clear one reads `✓ Approved`. That distinction is the whole point: it is the
+difference between "ready for takeoff" and "looks ready".
+
+Rules: **colors come from semantic theme tokens, never hex.** Every status carries an icon and
+a tooltip, so it never depends on color alone. `#2503` links to `prUrl`, opened in the system
+browser via `shell.openExternal`.
+
+Polling: 60s default, only for PRs attached to sessions currently in view, with ETag caching
+and a manual refresh. Backs off on 403/rate-limit.
+
+---
+
+## 7. UI
+
+```
+┌─ Control Tower ─────────────────────────────── ⟳ 12s ago   [theme ▾] ─┐
+│  ● Active (22)      ○ Recent      ✈ Ready for Takeoff                 │
+├───────────────────────────────────────────────────────────────────────┤
+│ ● Check new day skill status                             just now  ›  │
+│   chat-sdk · sean/beacon-chilipiper-integration*                      │
+│                                                                        │
+│ ○ Add quick replies support to web-v2 chat widget           3m ago  ›  │
+│   chat-sdk · sean/beacon-chilipiper…  ⬤#2538 approved         UNREAD  │
+│                                                                        │
+│ ○ Review legacyUI setting from master                      41m ago  ›  │
+│   chat-sdk · ⬤#2520 CI running  ⬤#2521 merged  ⬤#2522 waiting        │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+- **Active tab is scoped by recency, not liveness.** A session is active if it was touched
+  within the last N hours (default 8, configurable). Liveness alone is a poor filter: 19 of
+  22 live sessions are `idle` and some have been up for days, which would bury the handful
+  actually in flight. Sorted by last interaction descending. Leading dot is `busy`
+  (pulsing) / `idle` (hollow) / unknown (dim).
+- **Recent tab** — everything else, newest first, whether the process is alive or not. So it
+  holds both long-idle live sessions and exited ones, with the live ones still focusable and
+  marked as such. Summaries for exited sessions come from cmux's
+  `closed-item-history-com.cmuxterm.app.json` (~815KB of titles for closed panels), falling
+  back to first-user-prompt text.
+- Clicking the summary calls `focus()`. Clicking a PR badge opens GitHub.
+- Relative times tick client-side on a 30s interval; absolute timestamp in the tooltip.
+- A real resizable window that remembers its geometry. Frameless with a custom titlebar so
+  the theme covers the whole surface.
+
+Later (not in v1): tray/menubar popover, ⌘K palette, per-workspace grouping.
+
+---
+
+## 8. Summaries — how Control Tower gets one without a provider
+
+Claude Code stores no semantic summary (§2.3). cmux's titles come from its own
+`hooks claude auto-name` LLM call, so relying on them means the summary column goes blank the
+moment you switch terminals. **Control Tower generates its own.** Same layered shape as focus —
+best available wins:
+
+**Layer 1 — the provider's title, when there is one.** Free, already computed, no latency. cmux
+gives it via `surface.list`. Used as-is when present and non-stale.
+
+**Layer 2 — Control Tower's own titling call.** The provider-agnostic mechanism, and the reason
+the summary column never goes blank. Control Tower already watches every transcript, so:
+
+1. On a transcript growing past a threshold (debounced ~30s), read the **first user message**
+   plus the **last few turns** — a few KB, not the 20MB file.
+2. Ask for a ≤6-word title in one call, with a JSON schema so the output needs no parsing.
+3. Cache by `(sessionId, messageCount)` in SQLite (§3), so a title is computed once per
+   meaningful change and survives restart.
+
+No Claude Code hook is involved. Installing one would mean mutating your `settings.json`,
+colliding with cmux's own `Stop` hook, and only working for Claude Code — watching the file
+avoids all three and works for any terminal.
+
+**Layer 3 — heuristic, no LLM.** First user message, stripped of `<ide_opened_file>` /
+`<command-name>` wrappers, truncated. Free and instant; the fallback when no credential is
+configured, and what fills the Recent tab's long tail rather than paying to title hundreds of
+dead sessions.
+
+### Auth and model
+
+**Auth: the Anthropic SDK with profile-based credentials.** `ant auth login` stores a profile
+under `~/.config/anthropic/`, and a bare `new Anthropic()` picks it up with no env var — so **no
+key ever enters this repo or the app bundle**, which matters given the repo is public. If no
+profile and no key exists, fall back to Layer 3 rather than nagging.
+
+Rejected: `claude -p`. It reuses existing auth, but spawns a whole Claude Code process per
+title (seconds, not milliseconds) and bills against your Claude subscription. Fine as a
+zero-setup escape hatch; wrong as the default for a one-shot 20-token call.
+
+**Model: `claude-opus-5`** unless you say otherwise. Worth noting cost is *not* the deciding
+factor here — a titling call is ~2K in / ~20 out, so even at Opus rates it is about a cent per
+title, and titles are cached per meaningful change rather than per turn. `claude-haiku-4-5`
+($1/$5 per MTok) is the cheaper option if you want it, but pick it for latency, not for the
+fraction of a cent.
+
+---
+
+## 9. Milestones
+
+**M0 — Socket-auth spike (do this first; it gates §5 layer 1).**
+`cmux capabilities` reports `"access_mode": "cmuxOnly"`. Every probe so far ran from a
+terminal *inside* cmux. Control Tower is its own app, so the socket may reject it or
+require the password from cmux Settings (`--password` / `CMUX_SOCKET_PASSWORD`). Verify
+from an outside process. If it's blocked: fall back to reading cmux's session JSON
+directly (already proven to contain title + sessionId) and focus via the CLI binary, which
+inherits cmux's own trust. **This is the highest-risk unknown in the plan.**
+
+**M1 — Skeleton.** electron-vite + React 19 + Tailwind 4 + shadcn/ui. Build the §3 token layer
+*first* — semantic custom properties, two palettes to prove the swap, contrast-checked — then
+the theme switcher with a persisted choice, custom titlebar, window geometry, and
+eslint/prettier/husky. Ships as a window rendering a hardcoded session list at real density.
+The remaining palettes land in M7; two are enough to prove the mechanism, and building the
+token layer before any component stops hardcoded colors creeping in.
+
+**M2 — Collectors, store, and live updates.** Registry reader with `startedAt`-based liveness;
+transcript indexer with incremental byte-offset tail parsing backed by the §4 SQLite cache;
+`chokidar` watchers on `~/.claude/sessions/`, `~/.claude/projects/**/*.jsonl`, debounced 500ms;
+typed IPC pushing a `SessionSnapshot[]` to the renderer. Active list renders live with the
+Layer-1/Layer-3 summary, relative time, and status dot.
+
+**M3 — GitHub layer.** `gh api graphql` batched per repo, status model from §6,
+badges with icons, external links, ETag caching, 60s poll with backoff.
+
+**M4 — Recent tab.** The recency split from §7: a configurable active-window threshold, plus
+everything below it — long-idle live sessions and exited ones alike — from the transcript
+scan, with titles for exited sessions from cmux's closed-item history. Capped and paginated.
+
+**M5 — Provider abstraction.** The interface from §5, the cmux adapter (layer 1), the tty
+matcher (layer 2), and the config template (layer 3). Click-to-focus works. At least one
+non-cmux adapter — probably WezTerm or tmux — to prove the abstraction isn't cmux-shaped.
+
+**M6 — Own titling (§8 Layer 2).** The provider-agnostic summary: debounced transcript excerpt
+→ one schema-constrained titling call → cached by `(sessionId, messageCount)`. Falls back to
+Layer 3 when no credential is configured. Deliberately after M5, so the abstraction is proven
+before the app starts paying for titles — and so the non-cmux adapter has a summary to show.
+
+**M7 — Settings and polish.** Provider selection/override, poll interval, which repos to
+query, titling model and on/off, launch-at-login, packaged DMG.
+
+**M8 — Ready for Takeoff** (the next feature, scoped separately). A queue of work not yet
+started, persisted in SQLite (§4); "launch" creates the workspace and starts the session. cmux
+supports this directly — `cmux new-workspace --name … --cwd … --command …` — which is why
+`launch?()` is on the provider interface from the start. The §6 annotations matter most here:
+a PR that is approved with 8 unresolved threads is not ready to land, and this queue is where
+that distinction becomes actionable.
+
+---
+
+## 10. Repo conventions
+
+- `github.com/cannuk/control-tower`, public.
+- Plain commit messages, no conventional-commit prefixes.
+- PR body: `## What` / `## Why` / `## Testing` only.
+- Node via the Homebrew path (`/opt/homebrew/Cellar/node/23.11.0/bin`).
+
+---
+
+## 11. Decisions and remaining questions
+
+Settled:
+
+- **Public repo** at `github.com/cannuk/control-tower`. Since the code will be public, keep
+  machine-specific paths out of it — everything under `~/.claude` and the cmux store is
+  resolved at runtime from `os.homedir()`, never committed as a literal.
+- **Active is scoped by recency**, not liveness — see §7. Default threshold 8 hours.
+- **A window now**, tray/menubar popover deferred to a later milestone.
+- **SQLite, scoped to four non-derived things** — see §4. `better-sqlite3` for now.
+- **PR state is primary status + annotations**, not one badge — see §6. Confirmed against live
+  data: #2503 is approved and green with 8 unresolved threads.
+- **Control Tower generates its own summaries** — see §8. Provider titles are a fast path, not
+  the mechanism; the LLM call is ours, triggered by the file watcher, never by a Claude Code
+  hook.
+- **Titling auth is a profile-based Anthropic credential**, so no key lands in this public repo.
+- **shadcn/ui + Radix, not daisyUI** — see §3. A one-way door, taken deliberately: themes become
+  our own semantic CSS-variable sets (~8 curated palettes) in exchange for full control of
+  component behavior and dashboard density.
+
+Open:
+
+1. **Repo scope for PR polling.** Assumed default: every repo that appears in a `pr-link`
+   record, with a settings allowlist if it gets noisy. Currently 7 repos appear and 39 of 50
+   PRs are in `chat-sdk`, so the default is cheap — one GraphQL call per repo per poll.
+2. **What counts as "last interaction"?** Currently transcript mtime, which ticks on any
+   write including tool results, so a long autonomous run keeps a session looking fresh
+   without you touching it. The alternative is the last *user* message in the transcript.
+   Mtime is cheaper and probably what you want for "is this thing moving", but worth
+   revisiting once M2 is live and you can see how it feels.
