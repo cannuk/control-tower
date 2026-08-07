@@ -1,0 +1,200 @@
+import { execFile } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import type { TuneResult } from '../../shared/types.js'
+
+const run = promisify(execFile)
+
+/**
+ * cmux terminal provider — the layer-1 adapter from PLAN.md §5.
+ *
+ * cmux exposes a control API over an owner-only Unix socket. M0 established that
+ * it authorizes on filesystem permissions alone: a scrubbed environment with no
+ * `CMUX_SOCKET_CAPABILITY` token can still call `surface.list`, `surface.focus`,
+ * and `workspace.select`. That is why this works from a separate Electron app
+ * with no credential to store.
+ *
+ * The non-obvious part is that the socket does not know about every session.
+ * cmux materializes surfaces lazily, so `surface.list` returns only the *open*
+ * workspace's tabs — measured on a real machine: 4 surfaces against 20 claude
+ * panels the app had persisted, and 22 claude processes actually running. Passing
+ * `all_workspaces: true` changes nothing; the surfaces genuinely do not exist yet.
+ *
+ * So resolution is two-tier:
+ *
+ *   1. Ask the socket. If the session's tab is already materialized, focus it.
+ *      Exact, fast, no side effects.
+ *   2. Otherwise read cmux's persisted store to find which workspace holds the
+ *      session, select that workspace — which materializes its surfaces — and
+ *      then focus. Costs a workspace switch, which is what the user asked for
+ *      anyway by clicking "take me to this session".
+ *
+ * Every call uses `execFile` with an argument array, never a shell string. The
+ * session id originates in our own collectors, but interpolating a value like
+ * that into a shell command creates the injection risk regardless of provenance,
+ * and there is no upside to accepting it.
+ */
+
+const CANDIDATE_BINARIES = [
+  process.env.CMUX_BUNDLED_CLI_PATH,
+  '/Applications/cmux.app/Contents/Resources/bin/cmux',
+]
+
+const BUNDLE_ID = 'com.cmuxterm.app'
+
+const STORE_PATH = join(
+  homedir(),
+  'Library/Application Support/cmux/session-com.cmuxterm.app.json',
+)
+
+interface Surface {
+  id: string
+  ref: string
+  title?: string
+  resume_binding?: {
+    kind?: string
+    /** The Claude session id — the reason layer 1 is exact rather than heuristic. */
+    checkpoint_id?: string
+  }
+}
+
+function findBinary(): string | null {
+  for (const candidate of CANDIDATE_BINARIES) {
+    if (candidate && existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+export function detect(): boolean {
+  return findBinary() !== null
+}
+
+async function rpc<T>(method: string, params: unknown): Promise<T> {
+  const bin = findBinary()
+  if (!bin) throw new Error('cmux CLI not found')
+  const { stdout } = await run(bin, ['rpc', method, JSON.stringify(params)], {
+    timeout: 5000,
+    maxBuffer: 8 * 1024 * 1024,
+  })
+  return JSON.parse(stdout) as T
+}
+
+/** Materialized claude surfaces, keyed by Claude session id. */
+async function liveSurfaces(): Promise<Map<string, Surface>> {
+  const { surfaces } = await rpc<{ surfaces: Surface[] }>('surface.list', {
+    all_workspaces: true,
+  })
+  const bySession = new Map<string, Surface>()
+  for (const surface of surfaces) {
+    const binding = surface.resume_binding
+    if (binding?.kind === 'claude' && binding.checkpoint_id) {
+      bySession.set(binding.checkpoint_id, surface)
+    }
+  }
+  return bySession
+}
+
+/**
+ * Session id -> workspace id, from cmux's persisted layout.
+ *
+ * This covers sessions whose workspace has not been opened yet, which the socket
+ * cannot see. Read defensively: it is another application's private file, so a
+ * shape change should degrade tier 2 rather than break tuning altogether.
+ */
+function persistedWorkspaces(): Map<string, string> {
+  const bySession = new Map<string, string>()
+  try {
+    const store = JSON.parse(readFileSync(STORE_PATH, 'utf8')) as {
+      windows?: {
+        tabManager?: {
+          workspaces?: {
+            workspaceId?: string
+            panels?: { terminal?: { agent?: { sessionId?: string } } }[]
+          }[]
+        }
+      }[]
+    }
+    for (const window of store.windows ?? []) {
+      for (const workspace of window.tabManager?.workspaces ?? []) {
+        if (!workspace.workspaceId) continue
+        for (const panel of workspace.panels ?? []) {
+          const sessionId = panel.terminal?.agent?.sessionId
+          if (sessionId) bySession.set(sessionId, workspace.workspaceId)
+        }
+      }
+    }
+  } catch {
+    /* tier 2 unavailable; tier 1 still works */
+  }
+  return bySession
+}
+
+/** Select the tab, then raise cmux above other apps. Both are needed. */
+async function focusSurface(surface: Surface): Promise<TuneResult> {
+  try {
+    await rpc('surface.focus', { surface_id: surface.id })
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    return { ok: false, reason: `cmux refused to focus the tab: ${detail}` }
+  }
+
+  // `surface.focus` selects the tab within cmux but does not bring cmux forward;
+  // `open -b` activates the app but cannot choose a tab. Non-fatal: if this
+  // fails the tab is already selected and the user just switches apps manually.
+  try {
+    await run('/usr/bin/open', ['-b', BUNDLE_ID], { timeout: 5000 })
+  } catch {
+    /* ignored on purpose — see above */
+  }
+
+  return { ok: true, ref: surface.ref }
+}
+
+export async function focus(sessionId: string): Promise<TuneResult> {
+  if (!detect()) {
+    return { ok: false, reason: 'cmux is not installed on this machine' }
+  }
+
+  // Tier 1 — already materialized.
+  let live: Map<string, Surface>
+  try {
+    live = await liveSurfaces()
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    return { ok: false, reason: `could not reach cmux: ${detail}` }
+  }
+
+  const open = live.get(sessionId)
+  if (open) return focusSurface(open)
+
+  // Tier 2 — the session's workspace has not been opened this run.
+  const workspaceId = persistedWorkspaces().get(sessionId)
+  if (!workspaceId) {
+    return {
+      ok: false,
+      reason: 'cmux has no tab for this session — it may have been closed',
+    }
+  }
+
+  try {
+    await rpc('workspace.select', { workspace_id: workspaceId })
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    return { ok: false, reason: `could not open the session's workspace: ${detail}` }
+  }
+
+  // Selecting the workspace materializes its surfaces, so re-resolve.
+  try {
+    const hydrated = (await liveSurfaces()).get(sessionId)
+    if (hydrated) return focusSurface(hydrated)
+  } catch {
+    /* fall through to the message below */
+  }
+
+  return {
+    ok: false,
+    reason: 'opened the workspace, but cmux did not report a tab for this session',
+  }
+}

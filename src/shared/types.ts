@@ -116,3 +116,13 @@ export interface SessionSnapshot {
 export function squawk(sessionId: string): string {
   return sessionId.slice(0, 4).toUpperCase()
 }
+
+/**
+ * Outcome of trying to bring a session's terminal to the front.
+ *
+ * A discriminated result rather than a thrown error or a silent boolean: the
+ * failure cases here are ordinary and worth showing the user verbatim — the tab
+ * was closed, cmux is not installed, the socket did not answer. Each of those
+ * needs a different response from them, so each needs its own sentence.
+ */
+export type TuneResult = { ok: true; ref: string } | { ok: false; reason: string }

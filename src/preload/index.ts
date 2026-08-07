@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { SessionSnapshot, ThemeName } from '../shared/types.js'
+import type { SessionSnapshot, ThemeName, TuneResult } from '../shared/types.js'
 
 /**
  * The entire renderer→main surface. Deliberately a fixed, named list rather
@@ -11,6 +11,7 @@ const api = {
   setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke('prefs:setTheme', theme),
   getSnapshot: (): Promise<SessionSnapshot> => ipcRenderer.invoke('sessions:snapshot'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
+  tune: (sessionId: string): Promise<TuneResult> => ipcRenderer.invoke('session:tune', sessionId),
   closeWindow: (): Promise<void> => ipcRenderer.invoke('window:close'),
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
 }

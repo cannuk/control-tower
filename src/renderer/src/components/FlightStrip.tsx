@@ -1,4 +1,5 @@
-import { GitBranch, MapPin } from 'lucide-react'
+import { useState } from 'react'
+import { GitBranch, MapPin, TriangleAlert } from 'lucide-react'
 import { squawk, type Session } from '../../../shared/types.js'
 import { TRANSPONDER } from '../lib/status.js'
 import { absoluteTime, elapsed } from '../lib/time.js'
@@ -23,7 +24,22 @@ import { AdvisoryChip, StatusChip } from './StatusChip.js'
 export function FlightStrip({ session }: { session: Session }): React.JSX.Element {
   const transponder = TRANSPONDER[session.transponder]
   const description = session.summary ?? session.fallbackName
-  const contactable = session.location !== null
+  const [tuneError, setTuneError] = useState<string | null>(null)
+
+  /**
+   * Resolve the terminal at click time rather than trusting `session.location`.
+   *
+   * The snapshot's handle can be seconds stale — a tab closed since the last
+   * sweep would either focus the wrong thing or fail confusingly. The provider
+   * re-resolves by session id on every call, so the click is always acting on
+   * what is true now. It also means this works before the collectors exist,
+   * which is why the button is live in M1 instead of waiting for M5.
+   */
+  async function tune(): Promise<void> {
+    setTuneError(null)
+    const result = await window.controlTower.tune(session.sessionId)
+    if (!result.ok) setTuneError(result.reason)
+  }
 
   return (
     <article
@@ -57,18 +73,9 @@ export function FlightStrip({ session }: { session: Session }): React.JSX.Elemen
         <div className="flex items-baseline gap-3">
           <button
             type="button"
-            disabled={!contactable}
-            title={
-              contactable
-                ? `Tune to this flight in ${session.location?.providerId}`
-                : 'No terminal found — cannot tune to this flight'
-            }
-            className={cn(
-              'no-drag min-w-0 flex-1 truncate text-left text-[13px] leading-5 font-medium',
-              contactable
-                ? 'hover:text-accent cursor-pointer'
-                : 'text-text-muted cursor-default',
-            )}
+            onClick={() => void tune()}
+            title="Tune to this flight — bring its terminal to the front"
+            className="no-drag hover:text-accent min-w-0 flex-1 cursor-pointer truncate text-left text-[13px] leading-5 font-medium"
           >
             {description}
             {session.summary === null && (
@@ -100,6 +107,13 @@ export function FlightStrip({ session }: { session: Session }): React.JSX.Elemen
             </span>
           )}
         </div>
+
+        {tuneError && (
+          <p className="text-caution mt-2 flex items-start gap-1.5 text-[11px] leading-snug">
+            <TriangleAlert size={11} className="mt-0.5 shrink-0" aria-hidden />
+            {tuneError}
+          </p>
+        )}
 
         {session.prs.length > 0 && (
           // Flights get their own line. Mixed in with origin and branch they

@@ -1,8 +1,9 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import Store from 'electron-store'
-import { THEMES, type SessionSnapshot, type ThemeName } from '../shared/types.js'
+import { THEMES, type SessionSnapshot, type ThemeName, type TuneResult } from '../shared/types.js'
 import { PLACEHOLDER_SNAPSHOT } from './placeholder.js'
+import * as cmux from './providers/cmux.js'
 
 interface Bounds {
   x?: number
@@ -133,6 +134,20 @@ ipcMain.handle('sessions:snapshot', (): SessionSnapshot => ({
   ...PLACEHOLDER_SNAPSHOT,
   sweptAt: Date.now(),
 }))
+
+/**
+ * Tune to a session — bring its terminal to the front.
+ *
+ * Only the cmux adapter exists so far; §5 layers 2 and 3 (tty derivation and a
+ * configured command template) land in M5. Until then a session cmux does not
+ * know about reports why rather than failing silently.
+ */
+ipcMain.handle('session:tune', async (_e, sessionId: string): Promise<TuneResult> => {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return { ok: false, reason: 'no session id' }
+  }
+  return cmux.focus(sessionId)
+})
 
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   // Only ever hand http(s) to the OS — a file:// or custom scheme from the
