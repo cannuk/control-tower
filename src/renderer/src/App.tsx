@@ -4,7 +4,8 @@ import { FlightStrip } from './components/FlightStrip.js'
 import { Legend } from './components/Legend.js'
 import { Tabs } from './components/Tabs.js'
 import { TitleBar } from './components/TitleBar.js'
-import { splitByBoard, useStore } from './store.js'
+import { splitByBoard } from '../../shared/boards.js'
+import { useStore } from './store.js'
 
 export function App(): React.JSX.Element {
   const { init, snapshot, board, error, bumpTick, legendOpen, toggleLegend, subscribe } =

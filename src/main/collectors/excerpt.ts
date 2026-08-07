@@ -104,6 +104,27 @@ function isSynthetic(text: string): boolean {
   return SYNTHETIC.some((marker) => head.includes(marker))
 }
 
+/**
+ * Shortest user turn that can carry a topic.
+ *
+ * Not arbitrary: "sorry keep going", "another round", "check latest round", "yeah
+ * lets go", "sure". A long session is full of these, and they are the *most recent*
+ * thing said, so a plain last-three-turns excerpt collects nothing but nudges on
+ * exactly the sessions that have run longest.
+ *
+ * The consequence was not a vague summary but no summary at all: given three
+ * content-free turns the model declined outright — "I don't have enough context to
+ * write an accurate summary" — which the title guard rejected, which cached
+ * nothing, which meant the same two sessions were retried on every sweep forever.
+ * Both permanently blank rows on the board were this.
+ */
+const MIN_TURN_CHARS = 24
+
+/** A turn worth showing a summariser — real speech, not plumbing or a nudge. */
+function isSubstantive(text: string): boolean {
+  return text.length >= MIN_TURN_CHARS && !isSynthetic(text)
+}
+
 function scanForUserMessage(text: string): string | null {
   for (const line of text.split('\n')) {
     if (!line.startsWith('{')) continue
@@ -180,7 +201,14 @@ export function recentUserMessages(path: string, limit = 3): string[] {
   return best.reverse()
 }
 
-/** Newest-first user turns from a chunk of transcript, up to `limit`. */
+/**
+ * Newest-first *substantive* user turns from a chunk of transcript, up to `limit`.
+ *
+ * Skipping nudges rather than counting them is what makes the growing windows earn
+ * their keep: a window that yields only "keep going" now reports fewer turns than
+ * it holds, so `recentUserMessages` escalates and reaches back to the last thing
+ * that actually said something.
+ */
 function scanBackwards(text: string, limit: number): string[] {
   const found: string[] = []
   const lines = text.split('\n')
@@ -195,7 +223,7 @@ function scanBackwards(text: string, limit: number): string[] {
     }
     if (parsed.type !== 'user') continue
     const candidate = textOf(parsed.message?.content).trim()
-    if (!candidate || isSynthetic(candidate)) continue
+    if (!isSubstantive(candidate)) continue
     found.push(candidate.slice(0, 2000))
   }
   return found

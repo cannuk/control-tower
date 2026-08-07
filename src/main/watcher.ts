@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import type { SessionSnapshot } from '../shared/types.js'
+import { splitByBoard } from '../shared/boards.js'
 import { collect } from './collectors/snapshot.js'
 import { refresh as refreshGitHub } from './collectors/github.js'
 import Store from 'electron-store'
@@ -67,12 +68,21 @@ async function sweep(notify: SnapshotListener): Promise<void> {
     // network call it does not need.
     const titlingOn = new Store<{ titling: boolean }>().get('titling') !== false
     if (titlingOn && titlerBackend() !== null) {
-      // Only sessions still on the heuristic floor. A provider title is already
-      // an LLM summary and a generated one is ours — paying to redo either would
-      // be spend for no change on screen.
-      const candidates = snapshot.sessions
-        .filter((s) => s.transcriptPath !== null && s.summarySource !== 'provider')
-        .filter((s) => s.summarySource !== 'generated')
+      /**
+       * Only EN ROUTE sessions are summarised — roughly 16 rather than 106.
+       *
+       * EN ROUTE is the only board that asks "what is happening here", so it is
+       * the only one whose answer decays. APPROACH is named after its PR and
+       * LANDED after what shipped; neither needs a session summary, and a
+       * finished session's state will never change again. Summarising history
+       * was spend with no reader.
+       *
+       * Note this deliberately includes sessions that already have a cmux title:
+       * the terminal supplies a title but never a state, so those still need one
+       * call. The cached title keeps winning the headline.
+       */
+      const candidates = splitByBoard(snapshot)
+        .enRoute.filter((s) => s.transcriptPath !== null)
         .map((s) => ({ sessionId: s.sessionId, transcriptPath: s.transcriptPath as string }))
       if (candidates.length > 0 && (await runTitler(candidates)) > 0) {
         notify(await collect())

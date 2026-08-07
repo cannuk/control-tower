@@ -67,7 +67,11 @@ function titlerDir(): string {
  * spaces are all collapsed too.
  */
 export function projectDir(): string {
-  const mangled = '-' + titlerDir().replace(/^\//, '').replace(/[^A-Za-z0-9]/g, '-')
+  const mangled =
+    '-' +
+    titlerDir()
+      .replace(/^\//, '')
+      .replace(/[^A-Za-z0-9]/g, '-')
   return join(homedir(), '.claude', 'projects', mangled)
 }
 
@@ -191,6 +195,22 @@ export async function generate(prompt: string): Promise<Generated | null> {
   // itself, declining, or erroring — none of which belong on a strip.
   if (title.length > 70 || title.split(/\s+/).length > 10) return null
 
-  const state = (stateMatch?.[1] ?? '').trim().replace(/\s+/g, ' ').slice(0, 400)
+  /**
+   * The state ends at the first blank line, not at the end of the output.
+   *
+   * `STATE:` has to match to end-of-string because the state may legitimately be
+   * two sentences on two lines — but a model that has answered often keeps going:
+   * a horizontal rule, an offer to help, a follow-up question. Taking everything
+   * and collapsing whitespace glued all of that into one paragraph, and one strip
+   * read "…looking for Matt's replies on the PR. --- To proceed with the review,
+   * I'll need the PR URL or number. Which PR should I review?".
+   *
+   * A blank line is the boundary because the answer itself never contains one:
+   * two sentences of state are consecutive lines at most.
+   */
+  const state = ((stateMatch?.[1] ?? '').split(/\n[ \t]*\n/)[0] ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 400)
   return { title, state: state.length > 10 ? state : null }
 }

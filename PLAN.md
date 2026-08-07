@@ -308,39 +308,68 @@ and a manual refresh. Backs off on 403/rate-limit.
 
 ---
 
-## 7. UI
+## 7. UI — four boards, ordered by the review pipeline
 
 ```
-┌─ Control Tower ─────────────────────────────── ⟳ 12s ago   [theme ▾] ─┐
-│  ● Active (22)      ○ Recent      ✈ Ready for Takeoff                 │
-├───────────────────────────────────────────────────────────────────────┤
-│ ● Check new day skill status                             just now  ›  │
-│   chat-sdk · sean/beacon-chilipiper-integration*                      │
+┌─ Control Tower ──────────────────────────────── ⟳ 12s ago   [theme ▾] ─┐
+│  ◆ ON APPROACH (4)    ● EN ROUTE (16)    ▼ LANDED (10)    ✈ HOLDING    │
+├────────────────────────────────────────────────────────────────────────┤
+│ ●  7F93   Wire ChiliPiper onError through submit options     2m ago    │
+│           SESSION  Control Tower session dashboard                     │
+│           chat-sdk   sean/beacon-chilipiper-integration*               │
+│           ⬤ #2538 APPROVED   ▲ 3 unresolved                            │
 │                                                                        │
-│ ○ Add quick replies support to web-v2 chat widget           3m ago  ›  │
-│   chat-sdk · sean/beacon-chilipiper…  ⬤#2538 approved         UNREAD  │
-│                                                                        │
-│ ○ Review legacyUI setting from master                      41m ago  ›  │
-│   chat-sdk · ⬤#2520 CI running  ⬤#2521 merged  ⬤#2522 waiting        │
-└───────────────────────────────────────────────────────────────────────┘
+│ ○  4D5A   Hoist filterValueValidator out of the widget      41m ago    │
+│           PR 2520  Move validation into the shared module              │
+│           Extraction is done and tests pass; the v1 call site still    │
+│           imports the old path and needs updating before review.       │
+│           chat-sdk   cannuk/hoist-filter-validator                     │
+│           ⬤ #2520 CI RUNNING                                           │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Active tab is scoped by recency, not liveness.** A session is active if it was touched
-  within the last N hours (default 8, configurable). Liveness alone is a poor filter: 19 of
-  22 live sessions are `idle` and some have been up for days, which would bury the handful
-  actually in flight. Sorted by last interaction descending. Leading dot is `busy`
-  (pulsing) / `idle` (hollow) / unknown (dim).
-- **Recent tab** — everything else, newest first, whether the process is alive or not. So it
-  holds both long-idle live sessions and exited ones, with the live ones still focusable and
-  marked as such. Summaries for exited sessions come from cmux's
-  `closed-item-history-com.cmuxterm.app.json` (~815KB of titles for closed panels), falling
-  back to first-user-prompt text.
-- Clicking the summary calls `focus()`. Clicking a PR badge opens GitHub.
-- Relative times tick client-side on a 30s interval; absolute timestamp in the tooltip.
-- A real resizable window that remembers its geometry. Frameless with a custom titlebar so
-  the theme covers the whole surface.
+Boards are **stages of the review pipeline, not buckets of recency.** An earlier version split
+on "active" versus "recent" and it did not survive contact: LANDED-by-recency filled with
+sessions that had been interrupted and left sitting, which is the definition of a row you never
+need to look at. What actually determines whether something needs you is where its pull request
+is.
 
-Later (not in v1): tray/menubar popover, ⌘K palette, per-workspace grouping.
+- **ON APPROACH** — a session holding an **unmerged PR with human review activity**. Covers both
+  "changes requested, go fix it" and "approved but with follow-on comments I still want to read
+  before merging". These are the rows waiting on *you*, so this board leads.
+- **EN ROUTE** — touched within `EN_ROUTE_WINDOW_HOURS` (8) and holding no human-reviewed open
+  PR. Work in flight, with or without a PR yet. The only board that answers "what is happening
+  here", so the only one that carries a state summary (§8).
+- **LANDED** — the last `LANDED_LIMIT` (10) merged PRs, as a shipping log. A fixed count rather
+  than a time window: "the last ten things I shipped" stays a useful list through both a quiet
+  week and a busy one, where "the last 72 hours" is either empty or overflowing.
+- **HOLDING SHORT** — the staging area. Things queued for a session that does not exist yet.
+
+Three rules make the split behave:
+
+1. **Precedence: APPROACH, then LANDED, then EN ROUTE.** A session can hold several PRs, and one
+   somebody is waiting on must not be buried by a sibling that merged.
+2. **Nothing with an open PR reaches LANDED.** Not even alongside a merge — one merged sibling
+   must not file a whole session under "shipped". Caught on live data: a session with two merged
+   PRs and one open-but-unreviewed #2534 was sitting in LANDED.
+3. **Bots are not reviewers.** CodeRabbit comments on nearly every PR, so counting it as review
+   activity would put everything on APPROACH immediately. Detected structurally via
+   `author { __typename }` returning `Bot`, not by matching login names.
+
+Every strip carries **both** identities — session and PR — with the board deciding which leads.
+APPROACH and LANDED exist because of a pull request, so the PR titles the row and the session
+becomes the subtitle. EN ROUTE inverts it: the work is in flight, often with no PR at all, so the
+session leads. Whichever is secondary is still shown, because it is how you recognise the row.
+
+Rows are deliberately not dense. A flight progress strip is scanned at a glance, not read, so
+fields align into columns (fixed-width squawk gutter, elapsed time flush right) and the strip is
+given the height to breathe.
+
+Clicking the headline **tunes** to the session — brings its terminal to the front, or resumes it
+if no tab is live. Clicking a PR chip opens GitHub. Relative times tick client-side every 30s
+with the absolute timestamp in the tooltip.
+
+Later (not in v1): tray/menubar popover, command palette, per-workspace grouping.
 
 ---
 
@@ -354,14 +383,40 @@ best available wins:
 **Layer 1 — the provider's title, when there is one.** Free, already computed, no latency. cmux
 gives it via `surface.list`. Used as-is when present and non-stale.
 
-**Layer 2 — Control Tower's own titling call.** The provider-agnostic mechanism, and the reason
-the summary column never goes blank. Control Tower already watches every transcript, so:
+**Layer 2 — Control Tower's own summarising call.** The provider-agnostic mechanism, and the
+reason the column never goes blank. It also fixes something Layer 1 cannot: a terminal's title is
+written once and then drifts. cmux titled this project's own session "Check new day skill status"
+while it was megabytes deep in building Control Tower — accurate for the first question asked,
+useless as a description of the work.
 
-1. On a transcript growing past a threshold (debounced ~30s), read the **first user message**
-   plus the **last few turns** — a few KB, not the 20MB file.
-2. Ask for a ≤6-word title in one call, with a JSON schema so the output needs no parsing.
-3. Cache by `(sessionId, messageCount)` in SQLite (§3), so a title is computed once per
-   meaningful change and survives restart.
+One call returns **two** fields, because the prompt is already assembled and asking for both costs
+~60 extra output tokens where a second call would double the count:
+
+- a **title** of at most six words, and
+- a **state** of one or two sentences on where the work actually stands.
+
+Mechanics, all of which exist because a first cut got them wrong:
+
+1. **Scoped to EN ROUTE** — ~16 sessions, not the ~106 on disk. EN ROUTE is the only board that
+   asks "what is happening here", so it is the only one whose answer decays; APPROACH is named
+   after its PR and LANDED after what shipped. The unscoped version spent ~60 calls working
+   through history and reached 3 of the 16 rows actually displayed.
+2. **Cached on transcript byte size, and nothing else.** Transcripts are append-only, so a
+   byte-identical size means nothing has happened and there is provably nothing new to say — no
+   threshold to tune, no staleness window, no clock. An earlier "50KB *and* 25% growth" rule was
+   a spend control wearing a correctness costume.
+3. **First summaries are not rate-limited; refreshes are.** Filling a board is a bounded one-off
+   (~16 calls, single-digit thousands of tokens) and until it finishes the row shows a visible
+   gap, so it runs 5 per sweep until done. Refreshing is unbounded in principle — an active
+   session genuinely has changed every minute — so it is capped at 3 behind a 5-minute floor,
+   and only once nothing is waiting on a first summary. Putting both behind the floor is what
+   made the board look broken rather than thrifty.
+4. **Excerpted, not read whole.** The first user message plus the last few turns, from a file
+   that can be 20MB. Both windows grow on miss: one assistant turn can exceed 64KB, so a fixed
+   tail returned nothing for 5 of the 6 largest sessions. Tool output, hook output and IDE
+   notices are filtered out — otherwise a bash stdout block reads as the user speaking.
+5. **Sorted oldest-summary-first** on refresh. Every EN ROUTE session is usually "changed", so
+   taking them in list order would spend every slot on the same busiest sessions forever.
 
 No Claude Code hook is involved. Installing one would mean mutating your `settings.json`,
 colliding with cmux's own `Stop` hook, and only working for Claude Code — watching the file
@@ -372,22 +427,36 @@ avoids all three and works for any terminal.
 configured, and what fills the Recent tab's long tail rather than paying to title hundreds of
 dead sessions.
 
-### Auth and model
+### Auth and model — two backends, because a key is not always mintable
 
-**Auth: the Anthropic SDK with profile-based credentials.** `ant auth login` stores a profile
+**Preferred: the Anthropic SDK with profile-based credentials.** `ant auth login` stores a profile
 under `~/.config/anthropic/`, and a bare `new Anthropic()` picks it up with no env var — so **no
-key ever enters this repo or the app bundle**, which matters given the repo is public. If no
-profile and no key exists, fall back to Layer 3 rather than nagging.
+key ever enters this repo or the app bundle**, which matters given the repo is public. ~1s per
+call, no transcript written, spends an API budget.
 
-Rejected: `claude -p`. It reuses existing auth, but spawns a whole Claude Code process per
-title (seconds, not milliseconds) and bills against your Claude subscription. Fine as a
-zero-setup escape hatch; wrong as the default for a one-shot 20-token call.
+**Fallback, and the default in practice: headless Claude Code (`claude -p`).** Originally rejected
+here as too heavy — it spawns a whole process per call and bills the Claude subscription — and
+reinstated for the one reason that outranks that: **API keys cannot be minted in this org.** A
+backend nobody can turn on is worth less than a slow one that works everywhere Claude Code is
+already installed. `backend()` resolves per call rather than at startup, so a credential appearing
+while the app runs is picked up without a restart.
 
-**Model: `claude-opus-5`** unless you say otherwise. Worth noting cost is *not* the deciding
-factor here — a titling call is ~2K in / ~20 out, so even at Opus rates it is about a cent per
-title, and titles are cached per meaningful change rather than per turn. `claude-haiku-4-5`
-($1/$5 per MTok) is the cheaper option if you want it, but pick it for latency, not for the
-fraction of a cent.
+Two things the headless backend needs to be a good neighbour:
+
+- **Isolated.** Spawned with empty `--settings` hooks, `--strict-mcp-config` and an empty
+  `--mcp-config` from a dedicated scratch cwd, so it cannot fire cmux's hooks, load MCP servers,
+  or appear as a session in Control Tower's own board. Its project directory is excluded from the
+  transcript scan by name.
+- **Self-cleaning.** Each call leaves a transcript behind, pruned after every batch — and the
+  prune verifies each file's recorded `cwd` before deleting. The path-mangling rule matters here:
+  Claude replaces **every** non-alphanumeric character, not just `/` and `_`, so a hand-built
+  path silently matched nothing and pruned nothing.
+
+**Model: `claude-haiku-4-5`** for the headless backend, `claude-opus-5` at `effort: 'low'` for
+the SDK one. Cost is not the deciding factor — measured median is ~264 input tokens per call, so a
+full board is single-digit thousands of tokens — latency is. The SDK backend constrains output
+with a JSON schema; the headless one has no structured output, so it asks for labelled `TITLE:` /
+`STATE:` lines and validates the parse, rejecting titles over 70 characters or 10 words.
 
 ---
 
@@ -474,28 +543,38 @@ that distinction becomes actionable.
 Settled:
 
 - **Public repo** at `github.com/cannuk/control-tower`. Since the code will be public, keep
-  machine-specific paths out of it — everything under `~/.claude` and the cmux store is
-  resolved at runtime from `os.homedir()`, never committed as a literal.
-- **Active is scoped by recency**, not liveness — see §7. Default threshold 8 hours.
+  machine-specific paths out of it — everything under `~/.claude` and the cmux store is resolved
+  at runtime from `os.homedir()`, never committed as a literal.
+- **Boards are pipeline stages, not recency buckets** — see §7. Only EN ROUTE takes a recency
+  bound (8h); APPROACH and LANDED are defined by PR state, which stays meaningful however long
+  ago you last typed.
+- **Bots are not reviewers**, so CodeRabbit cannot promote a PR to APPROACH — see §7.
+- **Nothing with an open PR appears in LANDED** — see §7.
 - **A window now**, tray/menubar popover deferred to a later milestone.
-- **SQLite, scoped to four non-derived things** — see §4. `better-sqlite3` for now.
+- **SQLite via `node:sqlite`**, scoped to four non-derived things — see §4. `better-sqlite3` was
+  the plan until `DatabaseSync` turned out to ship in the bundled Node 24, which removes the
+  native module and `electron-rebuild` from the build entirely.
 - **PR state is primary status + annotations**, not one badge — see §6. Confirmed against live
   data: #2503 is approved and green with 8 unresolved threads.
-- **Control Tower generates its own summaries** — see §8. Provider titles are a fast path, not
-  the mechanism; the LLM call is ours, triggered by the file watcher, never by a Claude Code
-  hook.
-- **Titling auth is a profile-based Anthropic credential**, so no key lands in this public repo.
+- **Control Tower generates its own summaries**, title and state in one call, scoped to EN ROUTE
+  — see §8. Provider titles are a fast path, not the mechanism.
+- **Two titling backends, headless Claude Code being the default** — see §8. Not the original
+  plan; API keys are not mintable in this org, and a backend nobody can enable is worth less than
+  a slow one that works.
+- **One batched GraphQL query covering every repo**, aliased per repo rather than one call each.
+  Measured at ~1 point plus roughly 1 per PR against a 5000/hr budget, so no allowlist is needed.
 - **shadcn/ui + Radix, not daisyUI** — see §3. A one-way door, taken deliberately: themes become
-  our own semantic CSS-variable sets (~8 curated palettes) in exchange for full control of
-  component behavior and dashboard density.
+  our own semantic CSS-variable sets in exchange for full control of component behavior and
+  dashboard density.
 
 Open:
 
-1. **Repo scope for PR polling.** Assumed default: every repo that appears in a `pr-link`
-   record, with a settings allowlist if it gets noisy. Currently 7 repos appear and 39 of 50
-   PRs are in `chat-sdk`, so the default is cheap — one GraphQL call per repo per poll.
-2. **What counts as "last interaction"?** Currently transcript mtime, which ticks on any
-   write including tool results, so a long autonomous run keeps a session looking fresh
-   without you touching it. The alternative is the last *user* message in the transcript.
-   Mtime is cheaper and probably what you want for "is this thing moving", but worth
-   revisiting once M2 is live and you can see how it feels.
+1. **What counts as "last interaction"?** Currently transcript mtime, which ticks on any write
+   including tool results, so a long autonomous run keeps a session looking fresh without you
+   touching it. The alternative is the last *user* message in the transcript. Mtime is cheaper
+   and probably what you want for "is this thing moving", but worth revisiting now that EN ROUTE
+   membership depends on it.
+2. **`unread` is always false.** The strip already has a cocked-strip treatment for it and cmux
+   tracks `hasUnreadIndicator` in its store; wiring it up is unstarted.
+3. **Renderer bundle is ~695KB** for what is a dozen icons and a handful of Radix primitives.
+   `lucide-react`'s barrel import is not tree-shaking.

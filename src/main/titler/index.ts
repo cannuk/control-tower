@@ -20,12 +20,21 @@ import * as cli from './cli.js'
  * only for Claude Code.
  */
 
-/** Titles generated per sweep. Small on purpose — see `run`. */
-const PER_SWEEP = 3
-
-/** Re-title once a transcript has grown enough that the summary may be wrong. */
-const REGROWTH_BYTES = 50 * 1024
-const REGROWTH_FACTOR = 1.25
+/**
+ * Per-batch caps, split by whether a session has ever been summarised.
+ *
+ * First summaries and refreshes have different economics and deserve different
+ * limits. Filling EN ROUTE is a bounded one-off — ~16 sessions, ~5.6K tokens
+ * total — and until it finishes the board shows blank space where the state
+ * should be, so it should complete in minutes. Refreshing is unbounded in
+ * principle, because an active session changes constantly and would otherwise be
+ * due on every sweep, so that is what the interval below exists to rate-limit.
+ *
+ * Conflating the two is what made the board look broken: the fill inherited the
+ * refresh cadence and crawled at 3 every 5 minutes.
+ */
+const FIRST_PER_BATCH = 5
+const REFRESH_PER_BATCH = 3
 
 /**
  * Two fields, one call.
@@ -49,19 +58,35 @@ const INSTRUCTION = [
   'names — over generic verbs like "implement" or "investigate". Weight the most',
   'recent turns most heavily: they are where the session actually is. Write the',
   'state in plain past or present tense with no preamble.',
+  '',
+  // Without this the model treats a thin excerpt as a request it cannot fulfil and
+  // answers with questions instead: "I don't have enough context to write an
+  // accurate summary… What was completed? What's in progress?". That is not a
+  // summary, so the guard below discards it and the row stays blank. There is no
+  // one to answer the question, and a hedged summary of the opening request is
+  // worth more on a strip than nothing.
+  'This is a one-shot request with nobody to answer follow-up questions. If the',
+  'material is thin, summarise what it does show and hedge the state. Never ask a',
+  'question, never explain what you are missing, and never decline.',
 ].join('\n')
 
 /**
- * Shortest gap between titling batches.
+ * Shortest gap between *refresh* batches.
  *
- * Without this, titling runs on every sweep — and the GitHub poll alone fires one
- * every 60 seconds, so a worst case of 3 calls a minute is reachable purely from
- * the app sitting open. `needsTitle` already gates most of that, but a spend
- * ceiling should not depend on a freshness heuristic holding.
+ * Without this, refreshing runs on every sweep — and the GitHub poll alone fires
+ * one every 60 seconds, so a worst case of 3 calls a minute is reachable purely
+ * from the app sitting open. `needsSummary` cannot help here: an active session
+ * genuinely has changed every minute, so it says yes every time. That is exactly
+ * the case a spend ceiling has to cover, and it must not depend on a freshness
+ * heuristic saying no.
+ *
+ * First summaries are deliberately exempt. There are at most a boardful of them,
+ * each session qualifies once, and until it happens the row shows a gap where its
+ * state should be.
  */
-const MIN_BATCH_INTERVAL_MS = 5 * 60_000
+const MIN_REFRESH_INTERVAL_MS = 5 * 60_000
 
-let lastBatchAt = 0
+let lastRefreshAt = 0
 
 export type Backend = 'api' | 'cli' | null
 
@@ -91,7 +116,7 @@ function buildPrompt(transcriptPath: string): string | null {
   return parts.join('\n\n')
 }
 
-/** Current transcript size — the regrowth signal, so it must be real. */
+/** Current transcript size — the cache key, so a stat failure must not fake one. */
 function sizeOf(path: string): number {
   try {
     return statSync(path).size
@@ -100,57 +125,86 @@ function sizeOf(path: string): number {
   }
 }
 
-function needsTitle(sessionId: string, size: number): boolean {
-  const previous = cache.getGeneratedTitle(sessionId)
-  if (!previous) return true
-
-  // Titled before the state field existed. Without this the sessions generated
-  // earliest would be the last to ever get a state — they are already titled, so
-  // regrowth is the only other trigger — and the feature would look broken on
-  // precisely the sessions that have been on the board longest.
-  if (previous.state === null) return true
-
-  return (
-    size > previous.sizeAtTitle + REGROWTH_BYTES && size > previous.sizeAtTitle * REGROWTH_FACTOR
-  )
-}
-
 export interface TitleCandidate {
   sessionId: string
   transcriptPath: string
 }
 
 /**
- * Title a few sessions and report how many were written.
+ * Summarise a few sessions and report how many were written.
  *
- * Capped per sweep rather than draining the queue. A first run has ~80 untitled
- * sessions; firing them all would be a burst of latency and quota for a field the
- * heuristic has already filled, so the board stays readable while real titles
- * arrive over the following minutes. Each is cached, so the queue drains once.
+ * Sessions with no summary yet are worked through first and on every sweep, so
+ * EN ROUTE fills within a couple of minutes of the app opening. Only once the
+ * board is full does the slow refresh cadence take over.
+ *
+ * That ordering is the whole point. An earlier version put both kinds of work
+ * behind the refresh interval and the result looked broken rather than thrifty:
+ * thirteen of sixteen EN ROUTE rows sat blank, filling three every five minutes,
+ * while the cache held sixty summaries for sessions no board displays.
  *
  * Sequential, not parallel — the CLI backend spawns a Claude Code process per
- * call, and three at once would be three of those competing for the machine.
+ * call, and five at once would be five of those competing for the machine.
  */
 export async function run(candidates: TitleCandidate[]): Promise<number> {
   const chosen = backend()
   if (chosen === null) return 0
 
-  // The very first batch runs immediately: an empty board with no titles is the
-  // one moment where waiting five minutes is clearly wrong.
-  if (lastBatchAt !== 0 && Date.now() - lastBatchAt < MIN_BATCH_INTERVAL_MS) return 0
+  const failedAt = cache.failedTitleSizes()
+  const measured = candidates
+    .map((c) => ({
+      ...c,
+      size: sizeOf(c.transcriptPath),
+      previous: cache.getGeneratedTitle(c.sessionId),
+    }))
+    .filter((c) => c.size > 0)
 
-  const due = candidates
-    .map((c) => ({ ...c, size: sizeOf(c.transcriptPath) }))
-    .filter((c) => c.size > 0 && needsTitle(c.sessionId, c.size))
-    .slice(0, PER_SWEEP)
+  // Never summarised, or summarised before the state field existed — either way the
+  // row currently has nothing to say. Sessions where the last attempt at this exact
+  // size produced nothing usable are held back until the transcript moves on, since
+  // re-sending an identical prompt can only fail identically. Smallest transcript
+  // first: those are the fastest to excerpt, so the board fills visibly sooner.
+  const first = measured
+    .filter((c) => c.previous === null || c.previous.state === null)
+    .filter((c) => failedAt.get(c.sessionId) !== c.size)
+    .sort((a, b) => a.size - b.size)
+    .slice(0, FIRST_PER_BATCH)
+
+  /**
+   * Re-summarising sessions that already have a state. Only reached once nothing
+   * is waiting on a first summary, so a busy board can never starve the fill.
+   *
+   * The cache key is transcript size and nothing else. Transcripts are append-only,
+   * so a byte-identical size means nothing has happened since the last summary and
+   * there is provably nothing new to say — no threshold to tune, no staleness
+   * window, no clock. An earlier version required 50KB *and* 25% growth, which was
+   * a spend control wearing a correctness costume: it let an active session's
+   * summary go stale for however long another 50KB takes to write.
+   */
+  let refresh: typeof measured = []
+  if (first.length === 0 && Date.now() - lastRefreshAt >= MIN_REFRESH_INTERVAL_MS) {
+    // Oldest summary first. Every EN ROUTE session is usually "changed", so taking
+    // them in list order would spend all the slots on the same busiest sessions
+    // forever and never reach the quieter ones.
+    refresh = measured
+      .filter((c) => c.previous !== null && c.size !== c.previous.sizeAtTitle)
+      .sort((a, b) => (a.previous?.generatedAt ?? 0) - (b.previous?.generatedAt ?? 0))
+      .slice(0, REFRESH_PER_BATCH)
+    if (refresh.length > 0) lastRefreshAt = Date.now()
+  }
+
+  const due = [...first, ...refresh]
   if (due.length === 0) return 0
 
-  lastBatchAt = Date.now()
-
   const written: cache.GeneratedTitle[] = []
+  const failed: { sessionId: string; size: number }[] = []
   for (const candidate of due) {
     const prompt = buildPrompt(candidate.transcriptPath)
-    if (!prompt) continue
+    // No excerpt to send: recorded as a failure so this is not re-derived every
+    // sweep for a transcript that has not changed.
+    if (!prompt) {
+      failed.push({ sessionId: candidate.sessionId, size: candidate.size })
+      continue
+    }
     try {
       const result = chosen === 'api' ? await api.generate(prompt) : await cli.generate(prompt)
       if (result) {
@@ -160,14 +214,21 @@ export async function run(candidates: TitleCandidate[]): Promise<number> {
           state: result.state,
           sizeAtTitle: candidate.size,
         })
+      } else {
+        // The model answered but not usably — a refusal, a question, an
+        // explanation. Nothing to display, and nothing an identical retry would
+        // change, so hold off until the transcript grows.
+        failed.push({ sessionId: candidate.sessionId, size: candidate.size })
       }
     } catch {
-      // A failed title is not worth surfacing: the heuristic already shows
-      // something, and the next sweep retries.
+      // Transport-level failure — timeout, spawn error, a network blip. Unlike a
+      // refusal this says nothing about the input, so it is deliberately *not*
+      // recorded: the next sweep should try again.
     }
   }
 
   cache.putGeneratedTitles(written)
+  cache.putFailedTitles(failed)
   // The CLI backend leaves a transcript behind per call; clear them before they
   // accumulate. Cheap, and a no-op for the API backend.
   if (chosen === 'cli') cli.prune()
