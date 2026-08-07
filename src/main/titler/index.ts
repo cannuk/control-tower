@@ -27,13 +27,41 @@ const PER_SWEEP = 3
 const REGROWTH_BYTES = 50 * 1024
 const REGROWTH_FACTOR = 1.25
 
+/**
+ * Two fields, one call.
+ *
+ * The state costs nothing extra: the prompt is already assembled and sent, and
+ * asking for two sentences alongside the title adds ~60 output tokens. Generating
+ * them separately would double the call count for no benefit.
+ *
+ * The labelled format exists for the headless backend, which has no structured
+ * output and must be parsed. The API backend enforces the same two fields through
+ * a schema and ignores the labels.
+ */
 const INSTRUCTION = [
-  'Name this coding session for a dashboard.',
-  'At most six words describing what it is actually working on.',
-  'Prefer concrete nouns from the request — feature, customer, repo or file names —',
-  'over generic verbs like "implement" or "investigate".',
-  'No punctuation, no quotes. Reply with the title only.',
-].join(' ')
+  'Summarise this coding session for a dashboard. Reply in exactly this format:',
+  '',
+  'TITLE: at most six words naming what the session is working on',
+  'STATE: one or two sentences on where it currently stands — what has been done,',
+  'what is in progress, what is blocked',
+  '',
+  'Prefer concrete nouns from the conversation — feature, customer, repo or file',
+  'names — over generic verbs like "implement" or "investigate". Weight the most',
+  'recent turns most heavily: they are where the session actually is. Write the',
+  'state in plain past or present tense with no preamble.',
+].join('\n')
+
+/**
+ * Shortest gap between titling batches.
+ *
+ * Without this, titling runs on every sweep — and the GitHub poll alone fires one
+ * every 60 seconds, so a worst case of 3 calls a minute is reachable purely from
+ * the app sitting open. `needsTitle` already gates most of that, but a spend
+ * ceiling should not depend on a freshness heuristic holding.
+ */
+const MIN_BATCH_INTERVAL_MS = 5 * 60_000
+
+let lastBatchAt = 0
 
 export type Backend = 'api' | 'cli' | null
 
@@ -75,6 +103,13 @@ function sizeOf(path: string): number {
 function needsTitle(sessionId: string, size: number): boolean {
   const previous = cache.getGeneratedTitle(sessionId)
   if (!previous) return true
+
+  // Titled before the state field existed. Without this the sessions generated
+  // earliest would be the last to ever get a state — they are already titled, so
+  // regrowth is the only other trigger — and the feature would look broken on
+  // precisely the sessions that have been on the board longest.
+  if (previous.state === null) return true
+
   return (
     size > previous.sizeAtTitle + REGROWTH_BYTES && size > previous.sizeAtTitle * REGROWTH_FACTOR
   )
@@ -100,20 +135,31 @@ export async function run(candidates: TitleCandidate[]): Promise<number> {
   const chosen = backend()
   if (chosen === null) return 0
 
+  // The very first batch runs immediately: an empty board with no titles is the
+  // one moment where waiting five minutes is clearly wrong.
+  if (lastBatchAt !== 0 && Date.now() - lastBatchAt < MIN_BATCH_INTERVAL_MS) return 0
+
   const due = candidates
     .map((c) => ({ ...c, size: sizeOf(c.transcriptPath) }))
     .filter((c) => c.size > 0 && needsTitle(c.sessionId, c.size))
     .slice(0, PER_SWEEP)
   if (due.length === 0) return 0
 
+  lastBatchAt = Date.now()
+
   const written: cache.GeneratedTitle[] = []
   for (const candidate of due) {
     const prompt = buildPrompt(candidate.transcriptPath)
     if (!prompt) continue
     try {
-      const title = chosen === 'api' ? await api.generate(prompt) : await cli.generate(prompt)
-      if (title) {
-        written.push({ sessionId: candidate.sessionId, title, sizeAtTitle: candidate.size })
+      const result = chosen === 'api' ? await api.generate(prompt) : await cli.generate(prompt)
+      if (result) {
+        written.push({
+          sessionId: candidate.sessionId,
+          title: result.title,
+          state: result.state,
+          sizeAtTitle: candidate.size,
+        })
       }
     } catch {
       // A failed title is not worth surfacing: the heuristic already shows

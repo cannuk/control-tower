@@ -12,14 +12,20 @@ import { join } from 'node:path'
  * key is not always possible.
  */
 
+import type { Generated } from './types.js'
+
 const MODEL = 'claude-opus-5'
 
 const SCHEMA = {
   type: 'object',
   properties: {
     title: { type: 'string', description: 'At most six words. No trailing punctuation.' },
+    state: {
+      type: 'string',
+      description: 'One or two sentences on where the session currently stands.',
+    },
   },
-  required: ['title'],
+  required: ['title', 'state'],
   additionalProperties: false,
 } as const
 
@@ -41,7 +47,7 @@ export function available(): boolean {
   )
 }
 
-export async function generate(prompt: string): Promise<string | null> {
+export async function generate(prompt: string): Promise<Generated | null> {
   client ??= new Anthropic()
 
   const response = await client.messages.create({
@@ -61,10 +67,12 @@ export async function generate(prompt: string): Promise<string | null> {
   if (!block || block.type !== 'text') return null
 
   try {
-    const parsed = JSON.parse(block.text) as { title?: unknown }
+    const parsed = JSON.parse(block.text) as { title?: unknown; state?: unknown }
     if (typeof parsed.title !== 'string') return null
     const title = parsed.title.trim().replace(/[."']+$/, '')
-    return title.length > 2 ? title : null
+    if (title.length <= 2) return null
+    const state = typeof parsed.state === 'string' ? parsed.state.trim() : ''
+    return { title, state: state.length > 10 ? state : null }
   } catch {
     return null
   }

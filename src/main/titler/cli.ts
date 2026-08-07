@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:f
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
+import type { Generated } from './types.js'
 
 /**
  * Titling backend that shells out to headless Claude Code (`claude -p`).
@@ -165,27 +166,31 @@ function runHeadless(prompt: string): Promise<string | null> {
 }
 
 /**
- * A title, or null.
+ * A title and state, or null.
  *
- * The output is free text rather than a schema-validated field — headless mode
- * has no structured-output equivalent — so it is checked rather than trusted. A
- * refusal, an error message, or a chatty preamble all arrive on the same channel
- * as a good answer, and each must be rejected rather than shown as a title.
+ * Headless mode has no structured-output equivalent, so the response is free text
+ * on the same channel that carries refusals, errors and chatty preambles. It is
+ * therefore parsed and checked rather than trusted: the agreed shape is
+ * `TITLE: …` then `STATE: …`, and anything that fails to produce a plausible
+ * title is discarded so the heuristic stays in place.
  */
-export async function generate(prompt: string): Promise<string | null> {
+export async function generate(prompt: string): Promise<Generated | null> {
   const raw = await runHeadless(prompt)
   if (raw === null) return null
 
-  const title = raw
-    .trim()
-    .split('\n')[0]
-    ?.trim()
-    .replace(/^["'`]+|["'`.]+$/g, '')
-    .trim()
+  const titleMatch = /^\s*TITLE:\s*(.+)$/im.exec(raw)
+  const stateMatch = /^\s*STATE:\s*([\s\S]+)$/im.exec(raw)
+
+  // No labels at all: fall back to treating the first line as the title, which is
+  // what a model that ignored the format almost always produces.
+  const rawTitle = (titleMatch?.[1] ?? raw.trim().split('\n')[0] ?? '').trim()
+  const title = rawTitle.replace(/^["'`]+|["'`.]+$/g, '').trim()
 
   if (!title) return null
-  // A real answer is a handful of words. Anything longer is the model explaining
+  // A real title is a handful of words. Anything longer is the model explaining
   // itself, declining, or erroring — none of which belong on a strip.
   if (title.length > 70 || title.split(/\s+/).length > 10) return null
-  return title
+
+  const state = (stateMatch?.[1] ?? '').trim().replace(/\s+/g, ' ').slice(0, 400)
+  return { title, state: state.length > 10 ? state : null }
 }

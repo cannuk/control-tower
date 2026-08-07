@@ -65,20 +65,26 @@ function resolveSummary(
   sessionId: string,
   openingMessage: string,
   providerTitles: Map<string, string>,
-  ownTitles: Map<string, string>,
-): Pick<Session, 'summary' | 'summarySource'> {
-  const provider = providerTitles.get(sessionId)
-  if (provider) return { summary: provider, summarySource: 'provider' }
-
+  ownTitles: Map<string, { title: string; state: string | null }>,
+): Pick<Session, 'summary' | 'summarySource' | 'sessionState'> {
   const own = ownTitles.get(sessionId)
-  if (own) return { summary: own, summarySource: 'generated' }
+
+  // The generated state travels with the session even when the provider's title
+  // wins the headline: they answer different questions, and a cmux title does not
+  // preclude us having something to say about where the work stands.
+  const state = own?.state ?? null
+
+  const provider = providerTitles.get(sessionId)
+  if (provider) return { summary: provider, summarySource: 'provider', sessionState: state }
+
+  if (own) return { summary: own.title, summarySource: 'generated', sessionState: state }
 
   // The opening message is already in hand from the conversation check above, so
   // the heuristic costs nothing more than string work.
   const heuristic = heuristicTitle(openingMessage)
-  if (heuristic) return { summary: heuristic, summarySource: 'heuristic' }
+  if (heuristic) return { summary: heuristic, summarySource: 'heuristic', sessionState: state }
 
-  return { summary: null, summarySource: null }
+  return { summary: null, summarySource: null, sessionState: state }
 }
 
 function transponderFor(

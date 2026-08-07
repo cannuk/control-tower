@@ -122,6 +122,16 @@ export function FlightStrip({
           />
         )}
 
+        {/* Where the work actually stands, on the board where that is the
+            question. Deliberately allowed to wrap onto two lines rather than
+            truncate — a state summary cut off mid-clause tells you less than no
+            state at all, and EN ROUTE is short enough to afford the height. */}
+        {board === 'en-route' && session.sessionState && (
+          <p className="text-text-muted mt-2.5 text-[12px] leading-relaxed">
+            {session.sessionState}
+          </p>
+        )}
+
         <div className="text-text-subtle mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]">
           <span className="inline-flex items-center gap-1.5" title="Origin">
             <MapPin size={12} aria-hidden />

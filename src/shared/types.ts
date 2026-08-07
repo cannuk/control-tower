@@ -110,6 +110,16 @@ export interface Session {
    * has a perfectly good one from the terminal.
    */
   summarySource: 'provider' | 'generated' | 'heuristic' | null
+  /**
+   * One or two sentences on where the session currently stands.
+   *
+   * Only shown on EN ROUTE, where the question is "what is happening here" rather
+   * than "which PR is this". A title has to fit a fixed column and so can only
+   * name the topic; this is the room to say the topic has moved on, what is
+   * blocked, or what is half-finished. Null unless generated — the heuristic
+   * cannot produce one, since it only ever sees the opening request.
+   */
+  sessionState: string | null
   /** Registry-derived name (`chat-sdk-1f`) — the last-resort label. */
   fallbackName: string
   transponder: Transponder

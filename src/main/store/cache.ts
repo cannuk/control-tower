@@ -97,6 +97,15 @@ export function open(): DatabaseSync {
     );
   `)
 
+  // Added after session_title shipped. ALTER rather than a rebuild: regenerating
+  // every title would re-spend usage for a column that is additive.
+  const columns = (db.prepare('PRAGMA table_info(session_title)').all() as { name: string }[]).map(
+    (c) => c.name,
+  )
+  if (!columns.includes('state')) {
+    db.exec('ALTER TABLE session_title ADD COLUMN state TEXT')
+  }
+
   return db
 }
 
@@ -290,39 +299,51 @@ export function prStatuses(): Map<string, StoredPrStatus> {
 export interface GeneratedTitle {
   sessionId: string
   title: string
+  /** One or two sentences on where the session actually is. Null until generated. */
+  state: string | null
   sizeAtTitle: number
 }
 
 export function getGeneratedTitle(sessionId: string): GeneratedTitle | null {
   const row = open()
-    .prepare('SELECT session_id, title, size_at_title FROM session_title WHERE session_id = ?')
-    .get(sessionId) as { session_id: string; title: string; size_at_title: number } | undefined
+    .prepare(
+      'SELECT session_id, title, state, size_at_title FROM session_title WHERE session_id = ?',
+    )
+    .get(sessionId) as
+    | { session_id: string; title: string; state: string | null; size_at_title: number }
+    | undefined
   if (!row) return null
-  return { sessionId: row.session_id, title: row.title, sizeAtTitle: row.size_at_title }
+  return {
+    sessionId: row.session_id,
+    title: row.title,
+    state: row.state,
+    sizeAtTitle: row.size_at_title,
+  }
 }
 
-/** Every generated title, for the snapshot join. */
-export function generatedTitles(): Map<string, string> {
+/** Every generated title and state, for the snapshot join. */
+export function generatedTitles(): Map<string, { title: string; state: string | null }> {
   const rows = open()
-    .prepare('SELECT session_id, title FROM session_title')
-    .all() as { session_id: string; title: string }[]
-  return new Map(rows.map((r) => [r.session_id, r.title]))
+    .prepare('SELECT session_id, title, state FROM session_title')
+    .all() as { session_id: string; title: string; state: string | null }[]
+  return new Map(rows.map((r) => [r.session_id, { title: r.title, state: r.state }]))
 }
 
 export function putGeneratedTitles(titles: GeneratedTitle[]): void {
   if (titles.length === 0) return
   const database = open()
   const upsert = database.prepare(
-    `INSERT INTO session_title (session_id, title, size_at_title, generated_at)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO session_title (session_id, title, state, size_at_title, generated_at)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(session_id) DO UPDATE SET title = excluded.title,
+                                          state = excluded.state,
                                           size_at_title = excluded.size_at_title,
                                           generated_at = excluded.generated_at`,
   )
   database.exec('BEGIN')
   try {
     const now = Date.now()
-    for (const t of titles) upsert.run(t.sessionId, t.title, t.sizeAtTitle, now)
+    for (const t of titles) upsert.run(t.sessionId, t.title, t.state, t.sizeAtTitle, now)
     database.exec('COMMIT')
   } catch (cause) {
     database.exec('ROLLBACK')
