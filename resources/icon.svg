@@ -1,0 +1,77 @@
+<!--
+  Control Tower — app icon.
+
+  A tower cab: flared glass under a light roof, on a pedestal and base. Flat, no
+  gradients, no strokes. Two rules make it survive being 16px in a menu bar:
+
+    - Three shapes only, each a solid silhouette. Detail that cannot be resolved at
+      16px is detail that only adds noise at every size.
+    - Every element is split light/dark down the centre line at x=128. That single
+      vertical seam is what reads as "cylindrical glass" rather than "blue
+      trapezoid", and it costs nothing at small sizes because it stays a hard edge —
+      a gradient would mush into flat colour.
+
+  Content is inset to ~86% so the glyph does not touch the canvas edge; macOS
+  composites Dock icons with their own padding and a full-bleed mark looks cramped
+  beside everything else in the Dock.
+-->
+<svg
+  viewBox="0 0 256 256"
+  width="256"
+  height="256"
+  xmlns="http://www.w3.org/2000/svg"
+  role="img"
+  aria-label="Control tower"
+>
+  <defs>
+    <!-- Everything is drawn light, then redrawn dark through this. One clip, one
+         seam, applied identically to every part so the lighting stays consistent. -->
+    <clipPath id="shadeRight">
+      <rect x="128" y="0" width="128" height="256" />
+    </clipPath>
+  </defs>
+
+  <g transform="translate(128 130) scale(0.88) translate(-128 -130)">
+    <!-- Base -->
+    <g>
+      <rect x="50" y="228" width="156" height="18" fill="#A9B5BF" />
+      <g clip-path="url(#shadeRight)">
+        <rect x="50" y="228" width="156" height="18" fill="#7D8B99" />
+      </g>
+    </g>
+
+    <!-- Pedestal. Starts above the cab's lower edge so the two never gap apart at
+         small sizes, where a one-pixel seam reads as a broken shape. -->
+    <g>
+      <rect x="112" y="144" width="32" height="86" fill="#A9B5BF" />
+      <g clip-path="url(#shadeRight)">
+        <rect x="112" y="144" width="32" height="86" fill="#7D8B99" />
+      </g>
+    </g>
+
+    <!-- Glass -->
+    <g>
+      <polygon points="16,40 240,40 196,150 60,150" fill="#29ABE5" />
+      <g clip-path="url(#shadeRight)">
+        <polygon points="16,40 240,40 196,150 60,150" fill="#0080C8" />
+      </g>
+    </g>
+
+    <!-- Mullion band. Its x extents are the glass edges interpolated at this
+         height, so it lands flush with the taper instead of overhanging it. -->
+    <g>
+      <polygon points="38.4,96 217.6,96 212.8,108 43.2,108" fill="#D3DAE1" />
+      <g clip-path="url(#shadeRight)">
+        <polygon points="38.4,96 217.6,96 212.8,108 43.2,108" fill="#B4BFC9" />
+      </g>
+    </g>
+
+    <!-- Roof -->
+    <g>
+      <polygon points="76,14 180,14 240,40 16,40" fill="#E3E8ED" />
+      <g clip-path="url(#shadeRight)">
+        <polygon points="76,14 180,14 240,40 16,40" fill="#C3CCD5" />
+      </g>
+    </g>
+  </g>
+</svg>

@@ -14,8 +14,17 @@ const PROJECTS_DIR = join(homedir(), '.claude', 'projects')
  * then be queued for titling, generating more of them. The titler prunes its own
  * output, but a call in flight during a sweep would still slip through, and this
  * closes that window.
+ *
+ * Resolved on first sweep rather than at module load. The path depends on
+ * `app.getPath('userData')`, and module bodies run before `index.ts` has pinned it —
+ * so computing this eagerly captured whatever the default happened to be, which is
+ * a value package.json can change out from under us.
  */
-const EXCLUDED_PROJECT_DIRS = new Set([basename(titlerProjectDir())])
+let excludedProjectDirs: Set<string> | null = null
+function isExcludedProjectDir(name: string): boolean {
+  excludedProjectDirs ??= new Set([basename(titlerProjectDir())])
+  return excludedProjectDirs.has(name)
+}
 
 /**
  * Transcript indexer (PLAN.md §2.2).
@@ -55,14 +64,17 @@ interface PrLinkRecord {
 }
 
 /** Every top-level transcript, keyed by session id. */
-export function listTranscripts(): { transcripts: Map<string, TranscriptInfo>; warnings: string[] } {
+export function listTranscripts(): {
+  transcripts: Map<string, TranscriptInfo>
+  warnings: string[]
+} {
   const transcripts = new Map<string, TranscriptInfo>()
   const warnings: string[] = []
 
   let projectDirs: string[]
   try {
     projectDirs = readdirSync(PROJECTS_DIR, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !EXCLUDED_PROJECT_DIRS.has(e.name))
+      .filter((e) => e.isDirectory() && !isExcludedProjectDir(e.name))
       .map((e) => join(PROJECTS_DIR, e.name))
   } catch {
     return { transcripts, warnings: ['no ~/.claude/projects directory'] }
@@ -105,7 +117,10 @@ export function listTranscripts(): { transcripts: Map<string, TranscriptInfo>; w
  * Returns the byte offset consumed so the caller can persist it. The offset is
  * the position just past the last newline seen, never the end of the buffer.
  */
-function scanTail(info: TranscriptInfo, from: number): { links: cache.StoredPrLink[]; offset: number } {
+function scanTail(
+  info: TranscriptInfo,
+  from: number,
+): { links: cache.StoredPrLink[]; offset: number } {
   const links: cache.StoredPrLink[] = []
   const toRead = info.size - from
   if (toRead <= 0) return { links, offset: from }

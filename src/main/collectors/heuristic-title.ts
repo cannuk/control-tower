@@ -76,7 +76,10 @@ export function heuristicTitle(firstMessage: string | null): string | null {
   const sentence = /^(.{16,}?[.!?])(?:\s|$)/.exec(text)
   if (sentence?.[1]) text = sentence[1]
 
-  text = text.replace(FILLER, '').replace(/[.!?,\s]+$/, '').trim()
+  text = text
+    .replace(FILLER, '')
+    .replace(/[.!?,\s]+$/, '')
+    .trim()
   if (text.length < 3) return null
 
   return capitalize(truncateWords(text, 64))

@@ -44,10 +44,7 @@ const CANDIDATE_BINARIES = [
 
 const BUNDLE_ID = 'com.cmuxterm.app'
 
-const STORE_PATH = join(
-  homedir(),
-  'Library/Application Support/cmux/session-com.cmuxterm.app.json',
-)
+const STORE_PATH = join(homedir(), 'Library/Application Support/cmux/session-com.cmuxterm.app.json')
 
 interface Surface {
   id: string

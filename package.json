@@ -1,5 +1,6 @@
 {
   "name": "control-tower",
+  "productName": "Control Tower",
   "version": "0.1.0",
   "description": "A desktop dashboard for in-flight Claude Code sessions",
   "main": "./out/main/index.js",
@@ -41,5 +42,24 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.8.3",
     "vite": "^7.2.7"
+  },
+  "build": {
+    "appId": "com.cannuk.control-tower",
+    "productName": "Control Tower",
+    "mac": {
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "icon": "resources/icon.png"
+    },
+    "win": {
+      "icon": "resources/icon.png"
+    },
+    "files": [
+      "out/**/*",
+      "resources/icon.png",
+      "package.json"
+    ]
   }
 }

@@ -49,9 +49,26 @@ export function available(): boolean {
   return findClaude() !== null
 }
 
-/** Scratch cwd for headless calls, so their transcripts land somewhere we own. */
+/**
+ * Scratch cwd for headless calls, so their transcripts land somewhere we own.
+ *
+ * Deliberately pure — deriving the path must not create it. This used to `mkdirSync`
+ * on every call, which made merely *asking where the directory is* a filesystem
+ * write, and `transcripts.ts` asks at module load to build its exclusion set. Module
+ * bodies run before any statement in `index.ts`, including the one that pins
+ * `userData`, so adding `productName` to package.json — which changes what
+ * `app.getName()` returns, and therefore the default `userData` — silently created a
+ * stray `~/Library/Application Support/Control Tower/titler/` on the next launch.
+ * The directory was empty and harmless; the same ordering with a database in it
+ * would not have been.
+ */
 function titlerDir(): string {
-  const dir = join(app.getPath('userData'), 'titler')
+  return join(app.getPath('userData'), 'titler')
+}
+
+/** The same directory, created. Only the code that actually runs a call needs this. */
+function ensureTitlerDir(): string {
+  const dir = titlerDir()
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -139,7 +156,7 @@ function runHeadless(prompt: string): Promise<string | null> {
         JSON.stringify({ mcpServers: {} }),
       ],
       {
-        cwd: titlerDir(),
+        cwd: ensureTitlerDir(),
         // stdin ignored, not piped — an open pipe is what causes the 3s stall.
         stdio: ['ignore', 'pipe', 'pipe'],
       },

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
 import { join } from 'node:path'
 import Store from 'electron-store'
 import { THEMES, type SessionSnapshot, type ThemeName, type TuneResult } from '../shared/types.js'
@@ -6,6 +6,47 @@ import * as cmux from './providers/cmux.js'
 import { collect } from './collectors/snapshot.js'
 import * as cacheStore from './store/cache.js'
 import * as watcher from './watcher.js'
+
+/**
+ * The app is called Control Tower, not Electron.
+ *
+ * Two different things carry that name and only one is settable from here.
+ * `productName` in package.json names the packaged bundle, and it is what fixes the
+ * macOS menu bar — that string comes from the running bundle's Info.plist, so an
+ * unpackaged `electron-vite preview` reports "Electron" no matter what this file
+ * does. `app.setName` fixes everything the runtime owns: `app.getName()`, the
+ * default application menu, notifications, crash reports.
+ *
+ * The order below is load-bearing. `userData` is derived from the app name, so
+ * setting the name without pinning the path first would relocate the store from
+ * `control-tower` to `Control Tower` and silently orphan the database — every
+ * cached summary and PR status abandoned, the board rebuilding as though it were a
+ * first run, with the old directory still sitting there. Pinned explicitly to the
+ * existing path so the name can change without the data moving.
+ *
+ * Both calls must also precede the `new Store(...)` below, which resolves
+ * `userData` when it is constructed rather than when it is read.
+ */
+app.setPath('userData', join(app.getPath('appData'), 'control-tower'))
+app.setName('Control Tower')
+
+/**
+ * The Dock icon, for running unpackaged.
+ *
+ * Same situation as the name: a packaged build takes its icon from the bundle, which
+ * is what `build.icon` in package.json points at, and nothing here is needed. But
+ * `electron-vite preview` runs Electron's own bundle, so without this the Dock and
+ * app switcher show the Electron logo. `app.dock` exists only on macOS.
+ *
+ * Resolved relative to the built main file rather than `process.cwd()`, which is
+ * whatever directory the app happened to be launched from.
+ */
+function setDockIcon(): void {
+  if (process.platform !== 'darwin' || !app.dock) return
+  const icon = nativeImage.createFromPath(join(import.meta.dirname, '../../resources/icon.png'))
+  // An empty image would blank the Dock icon rather than leave the default.
+  if (!icon.isEmpty()) app.dock.setIcon(icon)
+}
 
 interface Bounds {
   x?: number
@@ -64,6 +105,8 @@ function createWindow(): void {
     show: false,
     frame: false,
     titleBarStyle: 'hiddenInset',
+    // Ignored on macOS (the bundle owns it); correct for Linux and Windows.
+    icon: join(import.meta.dirname, '../../resources/icon.png'),
     backgroundColor: firstPaint(readTheme()),
     webPreferences: {
       // .mjs, not .js — electron-vite emits the preload as ESM because the
@@ -153,23 +196,20 @@ ipcMain.handle('sessions:snapshot', (): Promise<SessionSnapshot> => collect())
  * configured command template) land in M5. Until then a session cmux does not
  * know about reports why rather than failing silently.
  */
-ipcMain.handle(
-  'session:tune',
-  async (_e, sessionId: string, cwd: string): Promise<TuneResult> => {
-    if (typeof sessionId !== 'string' || sessionId.length === 0) {
-      return { ok: false, reason: 'no session id' }
-    }
+ipcMain.handle('session:tune', async (_e, sessionId: string, cwd: string): Promise<TuneResult> => {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return { ok: false, reason: 'no session id' }
+  }
 
-    const focused = await cmux.focus(sessionId)
-    if (focused.ok) return focused
+  const focused = await cmux.focus(sessionId)
+  if (focused.ok) return focused
 
-    // No live tab, but the session is still resumable — so resume it rather than
-    // reporting a dead end. This is the ctrl+C-and-left-it-there case, which is
-    // exactly when you most want to get back in.
-    if (typeof cwd === 'string' && cwd.length > 0) return cmux.resume(sessionId, cwd)
-    return focused
-  },
-)
+  // No live tab, but the session is still resumable — so resume it rather than
+  // reporting a dead end. This is the ctrl+C-and-left-it-there case, which is
+  // exactly when you most want to get back in.
+  if (typeof cwd === 'string' && cwd.length > 0) return cmux.resume(sessionId, cwd)
+  return focused
+})
 
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   // Only ever hand http(s) to the OS — a file:// or custom scheme from the
@@ -185,6 +225,7 @@ ipcMain.handle('window:close', () => win?.close())
 ipcMain.handle('window:minimize', () => win?.minimize())
 
 void app.whenReady().then(() => {
+  setDockIcon()
   createWindow()
   watcher.start((snapshot) => watcher.pushTo(win, snapshot))
   app.on('activate', () => {
