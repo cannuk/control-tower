@@ -216,9 +216,9 @@ export function squawk(sessionId: string): string {
  * process; it says nothing about whether you owe anybody anything. Position in
  * the review pipeline does.
  */
-export type Board = 'departures' | 'en-route' | 'holding' | 'approach' | 'landed'
+export type Board = 'departures' | 'holding' | 'en-route' | 'approach' | 'landed'
 
-export const BOARDS: Board[] = ['departures', 'en-route', 'holding', 'approach', 'landed']
+export const BOARDS: Board[] = ['departures', 'holding', 'en-route', 'approach', 'landed']
 
 /**
  * This PR is on approach: still flying, and a human has been in the loop.

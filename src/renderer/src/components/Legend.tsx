@@ -47,12 +47,12 @@ const BOARDS: [string, string][] = [
     'Flight plans you filed — work you intend to start, with no session yet. Launching one opens a terminal in the directory you chose and starts a session with the plan as its prompt',
   ],
   [
-    'EN ROUTE',
-    'A running session touched in the last 8 hours, with no PR yet or no human review yet. An exited session is not in flight, however recently you left it. CodeRabbit does not count as a reviewer',
-  ],
-  [
     'HOLDING',
     'Sessions you parked yourself — the one board Control Tower does not decide. No time limit and no liveness check, so a hold keeps something exactly as long as you want it kept',
+  ],
+  [
+    'EN ROUTE',
+    'A running session touched in the last 8 hours, with no PR yet or no human review yet. An exited session is not in flight, however recently you left it. CodeRabbit does not count as a reviewer',
   ],
   [
     'APPROACH',

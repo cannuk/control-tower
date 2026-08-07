@@ -45,16 +45,16 @@ export function Tabs({
       title: 'Filed flight plans — work you intend to start, not a session yet',
     },
     {
-      id: 'en-route',
-      label: 'EN ROUTE',
-      count: counts['en-route'],
-      title: 'Still running and being worked — no PR yet, or no human has reviewed it',
-    },
-    {
       id: 'holding',
       label: 'HOLDING',
       count: counts.holding,
       title: 'Parked by you — out of EN ROUTE without being forgotten',
+    },
+    {
+      id: 'en-route',
+      label: 'EN ROUTE',
+      count: counts['en-route'],
+      title: 'Still running and being worked — no PR yet, or no human has reviewed it',
     },
     {
       id: 'approach',

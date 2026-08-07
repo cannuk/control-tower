@@ -4,6 +4,7 @@ import type { Departure } from '../../../shared/types.js'
 import { elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
 import { useStore } from '../store.js'
+import { StripAction } from './StripAction.js'
 
 /**
  * DEPARTURES — filed flight plans, and the only board you author.
@@ -275,20 +276,13 @@ function PlanStrip({
         )}
 
         <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
+          <StripAction
+            icon={PlaneTakeoff}
+            label={busy ? 'CLEARING' : 'LAUNCH'}
+            title="Open a terminal here and start a session with this plan"
             onClick={() => void launch()}
             disabled={busy}
-            title="Open a terminal here and start a session with this plan"
-            className={cn(
-              'field inline-flex items-center gap-1.5 rounded px-2.5 py-1.5',
-              'text-[11px] leading-none font-semibold',
-              busy ? 'bg-dormant text-dormant-fg' : 'bg-cleared text-cleared-fg hover:opacity-85',
-            )}
-          >
-            <PlaneTakeoff size={11} strokeWidth={2.5} aria-hidden />
-            {busy ? 'CLEARING' : 'LAUNCH'}
-          </button>
+          />
 
           <button
             type="button"

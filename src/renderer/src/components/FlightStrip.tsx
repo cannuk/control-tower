@@ -7,6 +7,7 @@ import { absoluteTime, elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
 import { useStore } from '../store.js'
 import { StatusChip } from './StatusChip.js'
+import { StripAction } from './StripAction.js'
 
 /**
  * One row, drawn as a flight progress strip.
@@ -176,37 +177,6 @@ export function FlightStrip({
               {session.gitDirty && <span title="Uncommitted changes">*</span>}
             </span>
           )}
-
-          {/*
-            Only on the two boards a session can move between. APPROACH and LANDED are
-            defined by PR state, so parking a row there would either do nothing visible
-            or hide something somebody is waiting on — the control would be a lie
-            either way.
-
-            Right-aligned and quiet: it is an occasional action, not part of reading
-            the row, and it should not compete with origin and branch for the eye.
-          */}
-          {(board === 'en-route' || board === 'holding') && (
-            <button
-              type="button"
-              onClick={() => void setHeld(session.sessionId, board === 'en-route')}
-              title={
-                board === 'en-route'
-                  ? 'Park this on HOLDING — out of EN ROUTE, kept indefinitely'
-                  : 'Send this back to EN ROUTE'
-              }
-              className="no-drag hover:bg-surface hover:text-text ml-auto inline-flex items-center gap-1.5 rounded px-2 py-1 transition-colors"
-            >
-              {board === 'en-route' ? (
-                <PauseCircle size={12} aria-hidden />
-              ) : (
-                <PlayCircle size={12} aria-hidden />
-              )}
-              <span className="field text-[10px] font-semibold tracking-wider">
-                {board === 'en-route' ? 'HOLD' : 'RELEASE'}
-              </span>
-            </button>
-          )}
         </div>
 
         {tuneError && (
@@ -214,6 +184,27 @@ export function FlightStrip({
             <TriangleAlert size={12} className="mt-0.5 shrink-0" aria-hidden />
             {tuneError}
           </p>
+        )}
+
+        {/*
+          Only on the two boards a session can move between. APPROACH and LANDED are
+          defined by PR state, so parking a row there would either do nothing visible
+          or hide something somebody is waiting on — the control would be a lie either
+          way. Last element of the strip, matching a filed plan's LAUNCH.
+        */}
+        {(board === 'en-route' || board === 'holding') && (
+          <div className="mt-3">
+            <StripAction
+              icon={board === 'en-route' ? PauseCircle : PlayCircle}
+              label={board === 'en-route' ? 'HOLD' : 'RELEASE'}
+              title={
+                board === 'en-route'
+                  ? 'Park this on HOLDING — out of EN ROUTE, kept indefinitely'
+                  : 'Send this back to EN ROUTE'
+              }
+              onClick={() => void setHeld(session.sessionId, board === 'en-route')}
+            />
+          </div>
         )}
 
         {session.prs.length > 0 && (
