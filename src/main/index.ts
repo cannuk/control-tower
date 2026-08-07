@@ -138,12 +138,23 @@ ipcMain.handle('sessions:snapshot', (): Promise<SessionSnapshot> => collect())
  * configured command template) land in M5. Until then a session cmux does not
  * know about reports why rather than failing silently.
  */
-ipcMain.handle('session:tune', async (_e, sessionId: string): Promise<TuneResult> => {
-  if (typeof sessionId !== 'string' || sessionId.length === 0) {
-    return { ok: false, reason: 'no session id' }
-  }
-  return cmux.focus(sessionId)
-})
+ipcMain.handle(
+  'session:tune',
+  async (_e, sessionId: string, cwd: string): Promise<TuneResult> => {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) {
+      return { ok: false, reason: 'no session id' }
+    }
+
+    const focused = await cmux.focus(sessionId)
+    if (focused.ok) return focused
+
+    // No live tab, but the session is still resumable — so resume it rather than
+    // reporting a dead end. This is the ctrl+C-and-left-it-there case, which is
+    // exactly when you most want to get back in.
+    if (typeof cwd === 'string' && cwd.length > 0) return cmux.resume(sessionId, cwd)
+    return focused
+  },
+)
 
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   // Only ever hand http(s) to the OS — a file:// or custom scheme from the

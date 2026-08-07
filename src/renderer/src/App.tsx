@@ -35,15 +35,27 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [legendOpen, toggleLegend])
 
-  const { pattern, landed } = splitByBoard(snapshot)
-  const strips = board === 'pattern' ? pattern : board === 'landed' ? landed : []
+  const { enRoute, approach, landed, olderCount } = splitByBoard(snapshot)
+  const strips =
+    board === 'approach'
+      ? approach
+      : board === 'en-route'
+        ? enRoute
+        : board === 'landed'
+          ? landed
+          : []
 
   return (
     <div className="bg-bg text-text relative flex h-full flex-col overflow-hidden">
       {legendOpen && <Legend onClose={toggleLegend} />}
 
       <TitleBar />
-      <Tabs patternCount={pattern.length} landedCount={landed.length} />
+      <Tabs
+        holdingCount={0}
+        enRouteCount={enRoute.length}
+        approachCount={approach.length}
+        landedCount={landed.length}
+      />
 
       <main className="min-h-0 flex-1 overflow-y-auto">
         {error && (
@@ -52,29 +64,34 @@ export function App(): React.JSX.Element {
           </p>
         )}
 
-        {!error && board === 'holding-short' && (
+        {!error && board === 'holding' && (
           <Placeholder
             icon={<PlaneTakeoff size={20} aria-hidden />}
             title="HOLDING SHORT"
-            body="Work queued but not yet departed. A flight waits here with clearance pending — lands in a later milestone."
+            body="A staging area for work you intend to pick up — add an item here and launch it as a session later. Not built yet."
           />
         )}
 
-        {!error && board !== 'holding-short' && strips.length === 0 && (
+        {!error && board !== 'holding' && strips.length === 0 && (
           <Placeholder
             icon={<Radar size={20} aria-hidden />}
-            title={board === 'pattern' ? 'PATTERN CLEAR' : 'NOTHING DOWN'}
-            body={
-              board === 'pattern'
-                ? 'No flight has made contact in the last 8 hours.'
-                : 'Every flight is still in the pattern.'
-            }
+            title={EMPTY[board].title}
+            body={EMPTY[board].body}
           />
         )}
 
         {strips.map((session) => (
-          <FlightStrip key={session.sessionId} session={session} />
+          <FlightStrip key={session.sessionId} session={session} board={board} />
         ))}
+
+        {board === 'landed' && olderCount > 0 && (
+          // Named, not silently dropped. A bounded board that admits its bound is
+          // honest; one that just stops is lossy and you cannot tell.
+          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
+            {olderCount} SESSION{olderCount === 1 ? '' : 'S'} OFF THE BOARDS — NOTHING IN REVIEW,
+            NOTHING SHIPPED RECENTLY
+          </p>
+        )}
       </main>
 
       {snapshot && snapshot.warnings.length > 0 && (
@@ -84,6 +101,22 @@ export function App(): React.JSX.Element {
       )}
     </div>
   )
+}
+
+/** Empty-state copy per board, so "nothing here" still says what it means. */
+const EMPTY: Record<'en-route' | 'approach' | 'landed', { title: string; body: string }> = {
+  approach: {
+    title: 'NOBODY WAITING',
+    body: 'No unmerged PR has been reviewed or commented on by a human. Nothing needs a decision from you right now.',
+  },
+  'en-route': {
+    title: 'NOTHING IN THE AIR',
+    body: 'No session touched in the last 8 hours that is still waiting on its first human review.',
+  },
+  landed: {
+    title: 'NOTHING SHIPPED',
+    body: 'No pull request has merged recently.',
+  },
 }
 
 function Placeholder({

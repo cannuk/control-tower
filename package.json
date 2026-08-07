@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "chokidar": "^5.0.0",
     "electron-store": "^11.0.2",
     "zustand": "^5.0.14"

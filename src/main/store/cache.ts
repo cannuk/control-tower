@@ -32,6 +32,22 @@ export function open(): DatabaseSync {
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA synchronous = NORMAL')
 
+  // pr_status is a pure cache, so a shape change is rebuilt rather than migrated.
+  // Anything expensive to recompute (scan offsets, PR links, generated titles)
+  // is never dropped by this.
+  db.exec('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)')
+  const PR_STATUS_SCHEMA = 3
+  const current = (
+    db.prepare("SELECT value FROM schema_meta WHERE key = 'pr_status'").get() as
+      | { value: number }
+      | undefined
+  )?.value
+  if (current !== PR_STATUS_SCHEMA) {
+    db.exec('DROP TABLE IF EXISTS pr_status')
+    db.prepare("INSERT INTO schema_meta (key, value) VALUES ('pr_status', ?) " +
+      'ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(PR_STATUS_SCHEMA)
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS transcript_scan (
       path      TEXT PRIMARY KEY,
@@ -58,13 +74,26 @@ export function open(): DatabaseSync {
       repository  TEXT NOT NULL,
       number      INTEGER NOT NULL,
       status      TEXT NOT NULL,
+      title       TEXT,
       advisories  INTEGER NOT NULL,
       outdated    INTEGER NOT NULL,
       -- Merged and closed are final. Persisting that lets later polls skip them
       -- entirely rather than re-asking GitHub about settled history.
       terminal    INTEGER NOT NULL,
+      -- A non-Bot review or review thread exists. The board's core distinction.
+      human_reviewed INTEGER NOT NULL DEFAULT 0,
+      merged_at   TEXT,
       fetched_at  INTEGER NOT NULL,
       PRIMARY KEY (repository, number)
+    );
+
+    CREATE TABLE IF NOT EXISTS session_title (
+      session_id     TEXT PRIMARY KEY,
+      title          TEXT NOT NULL,
+      -- Transcript size when the title was written. A title describes a moment;
+      -- this is how we notice the session has moved on enough to need a new one.
+      size_at_title  INTEGER NOT NULL,
+      generated_at   INTEGER NOT NULL
     );
   `)
 
@@ -163,10 +192,13 @@ export function close(): void {
 export interface StoredPrStatus {
   repository: string
   number: number
+  title: string | null
   status: string
   advisories: number
   outdatedAdvisories: number
   terminal: boolean
+  humanReviewed: boolean
+  mergedAt: string | null
   fetchedAt: number
 }
 
@@ -203,20 +235,25 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
   if (rows.length === 0) return
   const database = open()
   const upsert = database.prepare(
-    `INSERT INTO pr_status (repository, number, status, advisories, outdated, terminal, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(repository, number) DO UPDATE SET status = excluded.status,
+    `INSERT INTO pr_status (repository, number, title, status, advisories, outdated, terminal,
+                            human_reviewed, merged_at, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(repository, number) DO UPDATE SET title = excluded.title,
+                                                  status = excluded.status,
                                                   advisories = excluded.advisories,
                                                   outdated = excluded.outdated,
                                                   terminal = excluded.terminal,
+                                                  human_reviewed = excluded.human_reviewed,
+                                                  merged_at = excluded.merged_at,
                                                   fetched_at = excluded.fetched_at`,
   )
   database.exec('BEGIN')
   try {
     for (const r of rows) {
       upsert.run(
-        r.repository, r.number, r.status, r.advisories,
-        r.outdatedAdvisories, r.terminal ? 1 : 0, r.fetchedAt,
+        r.repository, r.number, r.title, r.status, r.advisories,
+        r.outdatedAdvisories, r.terminal ? 1 : 0,
+        r.humanReviewed ? 1 : 0, r.mergedAt, r.fetchedAt,
       )
     }
     database.exec('COMMIT')
@@ -229,20 +266,66 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
 /** Last-known status for every PR, keyed `repository#number`. */
 export function prStatuses(): Map<string, StoredPrStatus> {
   const rows = open()
-    .prepare(`SELECT repository, number, status, advisories, outdated, terminal, fetched_at
+    .prepare(`SELECT repository, number, title, status, advisories, outdated, terminal,
+                     human_reviewed, merged_at, fetched_at
               FROM pr_status`)
     .all() as {
-    repository: string; number: number; status: string; advisories: number
-    outdated: number; terminal: number; fetched_at: number
+    repository: string; number: number; title: string | null; status: string; advisories: number
+    outdated: number; terminal: number; human_reviewed: number
+    merged_at: string | null; fetched_at: number
   }[]
   return new Map(
     rows.map((r) => [
       `${r.repository}#${r.number}`,
       {
-        repository: r.repository, number: r.number, status: r.status,
+        repository: r.repository, number: r.number, title: r.title, status: r.status,
         advisories: r.advisories, outdatedAdvisories: r.outdated,
-        terminal: r.terminal === 1, fetchedAt: r.fetched_at,
+        terminal: r.terminal === 1, humanReviewed: r.human_reviewed === 1,
+        mergedAt: r.merged_at, fetchedAt: r.fetched_at,
       },
     ]),
   )
+}
+
+export interface GeneratedTitle {
+  sessionId: string
+  title: string
+  sizeAtTitle: number
+}
+
+export function getGeneratedTitle(sessionId: string): GeneratedTitle | null {
+  const row = open()
+    .prepare('SELECT session_id, title, size_at_title FROM session_title WHERE session_id = ?')
+    .get(sessionId) as { session_id: string; title: string; size_at_title: number } | undefined
+  if (!row) return null
+  return { sessionId: row.session_id, title: row.title, sizeAtTitle: row.size_at_title }
+}
+
+/** Every generated title, for the snapshot join. */
+export function generatedTitles(): Map<string, string> {
+  const rows = open()
+    .prepare('SELECT session_id, title FROM session_title')
+    .all() as { session_id: string; title: string }[]
+  return new Map(rows.map((r) => [r.session_id, r.title]))
+}
+
+export function putGeneratedTitles(titles: GeneratedTitle[]): void {
+  if (titles.length === 0) return
+  const database = open()
+  const upsert = database.prepare(
+    `INSERT INTO session_title (session_id, title, size_at_title, generated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(session_id) DO UPDATE SET title = excluded.title,
+                                          size_at_title = excluded.size_at_title,
+                                          generated_at = excluded.generated_at`,
+  )
+  database.exec('BEGIN')
+  try {
+    const now = Date.now()
+    for (const t of titles) upsert.run(t.sessionId, t.title, t.sizeAtTitle, now)
+    database.exec('COMMIT')
+  } catch (cause) {
+    database.exec('ROLLBACK')
+    throw cause
+  }
 }

@@ -57,11 +57,30 @@ export interface PrRef {
   number: number
   url: string
   repository: string
+  /** The PR's own title. On boards defined by PR state, this is the headline. */
+  title: string | null
   status: PrStatus
-  /** Review threads not marked resolved — the advisories against this flight. */
+  /**
+   * Unresolved review threads started by a **human**.
+   *
+   * Bot threads are excluded deliberately. CodeRabbit opens threads on most PRs,
+   * and counting them made "3 unresolved" appear on a PR no person had read —
+   * which is worse than no number, because it implies someone is waiting on you.
+   */
   advisories: number
   /** Advisories that are also outdated: usually stale nits. Tooltip only. */
   outdatedAdvisories: number
+  /**
+   * A human has reviewed or commented on this PR.
+   *
+   * The board's central distinction. `reviewDecision` alone cannot answer it:
+   * #2453 sat at REVIEW_REQUIRED with 25 open threads from three people, while
+   * #2545 had a full review posted by CodeRabbit and no human involvement at all.
+   * Any non-Bot review or thread counts.
+   */
+  humanReviewed: boolean
+  /** ISO timestamp, or null while unmerged. Orders the LANDED board. */
+  mergedAt: string | null
 }
 
 /** Where a session lives, and how to bring it to the front (PLAN.md §5). */
@@ -81,8 +100,16 @@ export interface Session {
   project: string
   gitBranch: string | null
   gitDirty: boolean
-  /** The semantic summary (PLAN.md §8), or null when only a fallback exists. */
+  /** The semantic summary (PLAN.md §8). Never null — §8 layer 3 guarantees one. */
   summary: string | null
+  /**
+   * Which tier of §8 produced `summary`.
+   *
+   * Load-bearing, not diagnostic: it is how the titler knows which sessions still
+   * need a real title, and it stops us paying to re-title a session that already
+   * has a perfectly good one from the terminal.
+   */
+  summarySource: 'provider' | 'generated' | 'heuristic' | null
   /** Registry-derived name (`chat-sdk-1f`) — the last-resort label. */
   fallbackName: string
   transponder: Transponder
@@ -118,6 +145,68 @@ export function squawk(sessionId: string): string {
 }
 
 /**
+ * The four boards, in the order work moves through them.
+ *
+ * This is a pipeline, not a set of filters on recency — which was the flaw in the
+ * previous PATTERN/LANDED split. "Not touched in 8 hours" is a fact about a
+ * process; it says nothing about whether you owe anybody anything. Position in
+ * the review pipeline does.
+ */
+export type Board = 'holding' | 'en-route' | 'approach' | 'landed'
+
+export const BOARDS: Board[] = ['holding', 'en-route', 'approach', 'landed']
+
+/**
+ * This PR is on approach: still flying, and a human has been in the loop.
+ *
+ * Covers both shapes that block a merge — changes you need to address, and an
+ * approval carrying non-blocking comments you still want to read before merging.
+ * Both mean the PR is close to the ground and needs a decision from you.
+ */
+export function onApproach(pr: PrRef): boolean {
+  return pr.mergedAt === null && pr.humanReviewed
+}
+
+/**
+ * The PR a strip should be named after, or null when the session is the subject.
+ *
+ * On APPROACH and LANDED the row exists *because of* a pull request, so naming it
+ * after the session buries the thing you came to read — two sessions called
+ * "Run phase 1 of the setup guide" are indistinguishable, while their PR titles
+ * are not. EN ROUTE is the opposite: the work is in flight, often with no PR at
+ * all, so the session is the subject there.
+ *
+ * With several candidates, the newest wins. PR numbers are monotonic per repo, so
+ * the highest number is the most recent piece of work — the one you are most
+ * likely to have in mind.
+ */
+export function headlinePr(session: Session, board: Board): PrRef | null {
+  if (board === 'approach') {
+    const candidates = session.prs.filter(onApproach)
+    return candidates.sort((a, b) => b.number - a.number)[0] ?? null
+  }
+  if (board === 'landed') {
+    const merged = session.prs.filter((pr) => pr.mergedAt !== null)
+    return (
+      merged.sort((a, b) => Date.parse(b.mergedAt ?? '') - Date.parse(a.mergedAt ?? ''))[0] ?? null
+    )
+  }
+  return null
+}
+
+/**
+ * Still in flight — neither merged nor abandoned.
+ *
+ * A PR whose state we could not read counts as open. That is the conservative
+ * direction: the cost of wrongly calling something open is one extra row on a
+ * working board, while wrongly calling it settled files unfinished work under
+ * "shipped", where you would never look for it again.
+ */
+export function isOpen(pr: PrRef): boolean {
+  return pr.mergedAt === null && pr.status !== 'diverted'
+}
+
+/**
  * Outcome of trying to bring a session's terminal to the front.
  *
  * A discriminated result rather than a thrown error or a silent boolean: the
@@ -125,4 +214,6 @@ export function squawk(sessionId: string): string {
  * was closed, cmux is not installed, the socket did not answer. Each of those
  * needs a different response from them, so each needs its own sentence.
  */
-export type TuneResult = { ok: true; ref: string } | { ok: false; reason: string }
+export type TuneResult =
+  | { ok: true; ref: string; resumed?: boolean }
+  | { ok: false; reason: string }

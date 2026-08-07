@@ -11,7 +11,8 @@ const api = {
   setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke('prefs:setTheme', theme),
   getSnapshot: (): Promise<SessionSnapshot> => ipcRenderer.invoke('sessions:snapshot'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
-  tune: (sessionId: string): Promise<TuneResult> => ipcRenderer.invoke('session:tune', sessionId),
+  tune: (sessionId: string, cwd: string): Promise<TuneResult> =>
+    ipcRenderer.invoke('session:tune', sessionId, cwd),
 
   /**
    * Subscribe to pushed sweeps. Returns an unsubscribe function — without one,

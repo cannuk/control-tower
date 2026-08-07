@@ -17,7 +17,7 @@ export function TitleBar(): React.JSX.Element {
   const { theme, setTheme, refresh, loading, snapshot, toggleLegend } = useStore()
 
   return (
-    <header className="drag-region border-border-base flex h-12 shrink-0 items-center gap-2.5 border-b pr-2 pl-20">
+    <header className="drag-region border-border-base flex h-14 shrink-0 items-center gap-2.5 border-b pr-3 pl-20">
       <RadioTower size={13} className="text-accent shrink-0" aria-hidden />
       <h1 className="field text-[11px] font-semibold tracking-widest">CONTROL TOWER</h1>
 

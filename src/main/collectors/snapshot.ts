@@ -5,6 +5,8 @@ import * as cache from '../store/cache.js'
 import { branchOf, cachedDirty, refreshDirty } from './git.js'
 import { readRegistry } from './registry.js'
 import { indexPrLinks, listTranscripts, resolveCwd } from './transcripts.js'
+import { firstUserMessage } from './excerpt.js'
+import { heuristicTitle } from './heuristic-title.js'
 
 /**
  * Assemble one sweep from the four sources (PLAN.md §2).
@@ -41,11 +43,42 @@ function toPrRefs(
       number: link.number,
       url: link.url,
       repository: link.repository,
+      title: known?.title ?? null,
       status: (known?.status as PrRef['status']) ?? 'no-contact',
       advisories: known?.advisories ?? 0,
       outdatedAdvisories: known?.outdatedAdvisories ?? 0,
+      humanReviewed: known?.humanReviewed ?? false,
+      mergedAt: known?.mergedAt ?? null,
     }
   })
+}
+
+/**
+ * Pick a summary and record which tier produced it.
+ *
+ * Order matters and is not just preference: the provider title is free and
+ * already computed, our own generated title is the terminal-agnostic one, and the
+ * heuristic is the floor that guarantees no strip is ever blank. Reading the
+ * transcript head only happens when the first two miss.
+ */
+function resolveSummary(
+  sessionId: string,
+  openingMessage: string,
+  providerTitles: Map<string, string>,
+  ownTitles: Map<string, string>,
+): Pick<Session, 'summary' | 'summarySource'> {
+  const provider = providerTitles.get(sessionId)
+  if (provider) return { summary: provider, summarySource: 'provider' }
+
+  const own = ownTitles.get(sessionId)
+  if (own) return { summary: own, summarySource: 'generated' }
+
+  // The opening message is already in hand from the conversation check above, so
+  // the heuristic costs nothing more than string work.
+  const heuristic = heuristicTitle(openingMessage)
+  if (heuristic) return { summary: heuristic, summarySource: 'heuristic' }
+
+  return { summary: null, summarySource: null }
 }
 
 function transponderFor(
@@ -77,7 +110,8 @@ export async function collect(): Promise<SessionSnapshot> {
 
   const prLinks = cache.prLinksBySession()
   const prStatuses = cache.prStatuses()
-  const titles = cmux.titles()
+  const providerTitles = cmux.titles()
+  const ownTitles = cache.generatedTitles()
   const byPid = new Map(entries.map((e) => [e.sessionId, e]))
 
   // Every cwd we will need a branch for, resolved before the git refresh so one
@@ -86,6 +120,21 @@ export async function collect(): Promise<SessionSnapshot> {
   const cwds = new Set<string>()
 
   for (const [sessionId, info] of transcripts) {
+    /**
+     * Only real conversations belong on the board.
+     *
+     * Opening a file in the IDE, or starting a terminal to run a command, can
+     * create a transcript that contains nothing but machine-authored notices.
+     * Those are not sessions you had — they are artifacts — and listing them
+     * pads the board with rows you can neither act on nor recognise.
+     *
+     * `firstUserMessage` escalates past its fast-path window before answering
+     * null, so this filter cannot silently discard a session whose opening
+     * prompt merely arrived late.
+     */
+    const opening = firstUserMessage(info.path)
+    if (opening === null) continue
+
     const entry = byPid.get(sessionId)
     const projectDirName = basename(dirname(info.path))
     const cwd = resolveCwd(projectDirName, entry?.cwd ?? null)
@@ -98,7 +147,8 @@ export async function collect(): Promise<SessionSnapshot> {
       project: basename(cwd),
       gitBranch: null, // filled below, after the branch read
       gitDirty: false,
-      summary: titles.get(sessionId) ?? null,
+      // Three-tier resolution (§8), best available wins.
+      ...resolveSummary(sessionId, opening, providerTitles, ownTitles),
       fallbackName: entry?.name ?? basename(cwd),
       transponder: transponderFor(entry?.status ?? null, entry !== undefined),
       lastContact: info.mtimeMs,

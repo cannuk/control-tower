@@ -1,53 +1,61 @@
+import type { Board } from '../../../shared/types.js'
 import { cn } from '../lib/utils.js'
-import { useStore, type Board } from '../store.js'
+import { useStore } from '../store.js'
 
 interface BoardSpec {
   id: Board
   label: string
-  count?: number
+  count: number
   title: string
 }
 
 /**
- * The three boards a controller works, in the order traffic moves through them:
- * what's in the air now, what's already down, and what's still waiting to go.
+ * The four boards, left to right in the order work moves through them:
+ * queued, being worked, under review, shipped.
  *
- * "PATTERN" is the traffic pattern — the circuit around the field where active
- * aircraft are being worked. "HOLDING SHORT" is the runway threshold, where a
- * flight waits with clearance pending: exactly a queued-but-unstarted task.
+ * That ordering is the point. The previous split was by recency, which answered
+ * "when did I last type here" — a fact about a process, not about whether anyone
+ * is waiting on you. This answers where the work sits.
  */
 export function Tabs({
-  patternCount,
+  holdingCount,
+  enRouteCount,
+  approachCount,
   landedCount,
 }: {
-  patternCount: number
+  holdingCount: number
+  enRouteCount: number
+  approachCount: number
   landedCount: number
 }): React.JSX.Element {
   const { board, setBoard } = useStore()
 
   const boards: BoardSpec[] = [
     {
-      id: 'pattern',
-      label: 'PATTERN',
-      count: patternCount,
-      title: 'In the pattern — touched in the last 8 hours',
+      id: 'holding',
+      label: 'HOLDING',
+      count: holdingCount,
+      title: 'Holding short — work staged for a future session',
     },
-    { id: 'landed', label: 'LANDED', count: landedCount, title: 'Down — everything older' },
     {
-      // Reachable even though the queue itself is unbuilt. A disabled tab tells
-      // you nothing about what it's for; the board behind it explains itself and
-      // shows where the app is going.
-      id: 'holding-short',
-      label: 'HOLDING SHORT',
-      count: 0,
-      title: 'Queued for departure — the board is live, the queue lands in M8',
+      id: 'en-route',
+      label: 'EN ROUTE',
+      count: enRouteCount,
+      title: 'Being worked — no PR yet, or no human has reviewed it',
     },
+    {
+      id: 'approach',
+      label: 'APPROACH',
+      count: approachCount,
+      title: 'On approach — unmerged PR that a human has reviewed or commented on',
+    },
+    { id: 'landed', label: 'LANDED', count: landedCount, title: 'Recently merged' },
   ]
 
   return (
     <nav
       role="tablist"
-      className="border-border-base flex shrink-0 items-center gap-1.5 border-b px-2.5 py-2"
+      className="border-border-base flex shrink-0 items-center gap-1 border-b px-3 py-2.5"
     >
       {boards.map(({ id, label, count, title }) => (
         <button
@@ -57,12 +65,21 @@ export function Tabs({
           title={title}
           onClick={() => setBoard(id)}
           className={cn(
-            'field rounded px-2.5 py-1.5 text-[11px] font-semibold tracking-wider transition-colors',
+            'field rounded px-3 py-2 text-[11px] font-semibold tracking-wider transition-colors',
             board === id ? 'bg-surface-raised text-text' : 'text-text-subtle hover:text-text',
           )}
         >
           {label}
-          {count !== undefined && <span className="ml-1.5 opacity-60">{count}</span>}
+          <span
+            className={cn(
+              'ml-1.5 tabular-nums',
+              // A zero count should recede; a non-zero one on APPROACH is the
+              // number you actually came here to read.
+              count === 0 ? 'opacity-35' : id === 'approach' ? 'text-caution' : 'opacity-60',
+            )}
+          >
+            {count}
+          </span>
         </button>
       ))}
     </nav>

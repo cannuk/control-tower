@@ -27,20 +27,50 @@ const run = promisify(execFile)
 
 const GH_CANDIDATES = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']
 
+/**
+ * `author { __typename }` is the whole reason this query grew.
+ *
+ * GitHub types a review author as `User` or `Bot`, which is the only reliable way
+ * to tell a person's review from CodeRabbit's — matching on login would need a
+ * hardcoded list of every bot you might install. `reviews` is capped at 30
+ * because the flag only asks *whether* a human participated; the thread scan
+ * supplies the counts.
+ */
 const FRAGMENT = `
 fragment F on PullRequest {
-  number state isDraft reviewDecision
-  reviewThreads(first: 50) { nodes { isResolved isOutdated } }
+  number title state isDraft reviewDecision mergedAt
+  reviews(first: 30) { nodes { author { __typename } } }
+  reviewThreads(first: 100) {
+    nodes { isResolved isOutdated comments(first: 1) { nodes { author { __typename } } } }
+  }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`
 
+interface Author {
+  __typename: string
+}
+
 interface GraphQlPr {
   number: number
+  title: string
   state: 'OPEN' | 'MERGED' | 'CLOSED'
   isDraft: boolean
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null
-  reviewThreads: { nodes: { isResolved: boolean; isOutdated: boolean }[] }
+  mergedAt: string | null
+  reviews: { nodes: { author: Author | null }[] }
+  reviewThreads: {
+    nodes: {
+      isResolved: boolean
+      isOutdated: boolean
+      comments: { nodes: { author: Author | null }[] }
+    }[]
+  }
   commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] }
+}
+
+/** A null author is a deleted account — treat as human, not as a bot. */
+function isBot(author: Author | null | undefined): boolean {
+  return author?.__typename === 'Bot'
 }
 
 function findGh(): string | null {
@@ -124,16 +154,25 @@ export async function refresh(): Promise<string[]> {
 
     for (const pr of Object.values(repoData)) {
       if (!pr) continue // deleted, or not visible to this account
+
       const threads = pr.reviewThreads.nodes
-      const unresolved = threads.filter((t) => !t.isResolved)
-      const status = toStatus(pr)
+      const humanThreads = threads.filter((t) => !isBot(t.comments.nodes[0]?.author))
+      const unresolved = humanThreads.filter((t) => !t.isResolved)
+
       updates.push({
         repository,
         number: pr.number,
-        status,
+        title: pr.title,
+        status: toStatus(pr),
+        // Human threads only — see the note on PrRef.advisories.
         advisories: unresolved.length,
         outdatedAdvisories: unresolved.filter((t) => t.isOutdated).length,
         terminal: pr.state !== 'OPEN',
+        // Either signal counts: a posted review, or a thread someone opened.
+        // #2453 had 25 open human threads while still reading REVIEW_REQUIRED.
+        humanReviewed:
+          pr.reviews.nodes.some((r) => !isBot(r.author)) || humanThreads.length > 0,
+        mergedAt: pr.mergedAt,
         fetchedAt: now,
       })
     }

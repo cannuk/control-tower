@@ -30,10 +30,25 @@ const STATUS_ORDER: PrStatus[] = [
   'no-contact',
 ]
 
+/**
+ * Boards in pipeline order, with the rule that puts a session on each. Written
+ * out because the rules are the product: "why is this here" should be answerable
+ * without reading the source.
+ */
 const BOARDS: [string, string][] = [
-  ['PATTERN', 'Sessions touched in the last 8 hours — what you are actively working'],
-  ['LANDED', 'Everything older, whether the process is still alive or not'],
-  ['HOLDING SHORT', 'Queued work that has not departed yet'],
+  ['HOLDING', 'Staged work you intend to start — not a session yet'],
+  [
+    'EN ROUTE',
+    'Touched in the last 8 hours, with no PR yet or no human review yet. CodeRabbit does not count as a reviewer',
+  ],
+  [
+    'APPROACH',
+    'An unmerged PR a human has reviewed or commented on — feedback to address, or an approval with comments worth reading first',
+  ],
+  [
+    'LANDED',
+    'Recently merged, newest first. A session with any still-open PR never appears here, even if a sibling PR merged',
+  ],
 ]
 
 const MARKINGS: [string, string][] = [

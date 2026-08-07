@@ -16,7 +16,7 @@ export function StatusChip({ prRef }: { prRef: PrRef }): React.JSX.Element {
       onClick={() => void window.controlTower.openExternal(prRef.url)}
       title={prTooltip(prRef)}
       className={cn(
-        'no-drag field inline-flex items-center gap-1.5 rounded px-2 py-1',
+        'no-drag field inline-flex items-center gap-1.5 rounded px-2.5 py-1.5',
         'text-[11px] leading-none font-semibold',
         'transition-opacity hover:opacity-75',
         chip,
@@ -49,7 +49,7 @@ export function AdvisoryChip({ prRef }: { prRef: PrRef }): React.JSX.Element | n
     <span
       title={prTooltip(prRef)}
       className={cn(
-        'field rounded px-2 py-1 text-[11px] leading-none font-semibold',
+        'field rounded px-2.5 py-1.5 text-[11px] leading-none font-semibold',
         advisoriesAreActionable(prRef.status)
           ? 'bg-advisory text-advisory-text'
           : 'text-text-subtle',

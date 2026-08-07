@@ -236,3 +236,68 @@ export async function focus(sessionId: string): Promise<TuneResult> {
     reason: 'opened the workspace, but cmux did not report a tab for this session',
   }
 }
+
+/**
+ * Start a new cmux workspace resuming a session that has no live tab.
+ *
+ * The common case this exists for: you ctrl+C out of a session but leave it
+ * around in case you want to pick it back up. Before this, clicking such a strip
+ * reported "no cmux tab" and stopped — technically true and completely useless,
+ * because the session is resumable and the resume command is right there in
+ * cmux's own persisted store.
+ *
+ * The command is preferred from `resume_binding.command` when cmux recorded one,
+ * since that carries the flags the session was started with (permission mode in
+ * particular). Only when it is absent do we synthesise a plain `claude --resume`.
+ */
+export async function resume(sessionId: string, cwd: string): Promise<TuneResult> {
+  if (!detect()) return { ok: false, reason: 'cmux is not installed on this machine' }
+
+  const recorded = persistedResumeCommands().get(sessionId)
+  const command = recorded ?? `claude --resume '${sessionId}'`
+
+  try {
+    await rpc('workspace.create', { cwd, command, focus: true })
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    return { ok: false, reason: `could not start a workspace: ${detail}` }
+  }
+
+  try {
+    await run('/usr/bin/open', ['-b', BUNDLE_ID], { timeout: 5000 })
+  } catch {
+    /* tab is created either way */
+  }
+
+  return { ok: true, ref: 'resumed', resumed: true }
+}
+
+/** Session id -> the exact command cmux used to launch it, when recorded. */
+function persistedResumeCommands(): Map<string, string> {
+  const bySession = new Map<string, string>()
+  try {
+    const store = JSON.parse(readFileSync(STORE_PATH, 'utf8')) as {
+      windows?: {
+        tabManager?: {
+          workspaces?: {
+            panels?: {
+              terminal?: { agent?: { sessionId?: string }; resumeBinding?: { command?: string } }
+            }[]
+          }[]
+        }
+      }[]
+    }
+    for (const window of store.windows ?? []) {
+      for (const workspace of window.tabManager?.workspaces ?? []) {
+        for (const panel of workspace.panels ?? []) {
+          const sessionId = panel.terminal?.agent?.sessionId
+          const command = panel.terminal?.resumeBinding?.command
+          if (sessionId && command) bySession.set(sessionId, command)
+        }
+      }
+    }
+  } catch {
+    /* fall back to a synthesised command */
+  }
+  return bySession
+}
