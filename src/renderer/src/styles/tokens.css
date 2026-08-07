@@ -1,0 +1,180 @@
+/*
+ * Control Tower — semantic token layer (PLAN.md §3)
+ *
+ * The visual language is an air traffic control console. That is not decoration:
+ * ATC displays solve the exact problem this app has — let one person track many
+ * simultaneous things at a glance and spot the one that needs attention now.
+ * Borrowed conventions, and why each earns its place:
+ *
+ *   - Dark scope by default. A radar display is dark so that bright symbology
+ *     carries all the signal. Our default is the same: dim chrome, bright status.
+ *   - The ATC color convention, used strictly:
+ *       green  = traffic you control, proceeding normally
+ *       amber  = caution / advisory — look, but nothing has failed
+ *       red    = conflict alert — the one thing you must handle now
+ *       cyan   = informational, another sector's problem, not yours
+ *       dim    = uncorrelated or coasting target, no live data
+ *     Statuses map onto this rather than picking pleasant colors.
+ *   - Monospaced data fields. Flight strips and data blocks are fixed-width so
+ *     the eye scans a column instead of reading each row.
+ *
+ * Rules, in order of importance:
+ *   1. Every color resolves to a token here. No hex outside this file.
+ *   2. Names describe MEANING, not appearance: `--ct-alert`, never `--red`.
+ *   3. A palette must define every token. A missing one silently inherits the
+ *      previous theme's value — the bug this layer exists to prevent.
+ *   4. Contrast is on us; shadcn ships no themes so nothing checks it. Body text
+ *      targets >= 7:1 on its surface, status text >= 4.5:1. Figures noted per
+ *      palette so a later edit can be re-verified.
+ *
+ * `amber-sector` is deliberately near-monochrome. If the UI stays readable there,
+ * color genuinely isn't load-bearing anywhere — it's a standing accessibility
+ * test, not just a retro option.
+ */
+
+:root,
+[data-theme='night-scope'] {
+  color-scheme: dark;
+
+  /* Surfaces — the scope. Faint blue-green cast, as on a modern STARS display. */
+  --ct-bg: oklch(15% 0.014 200);
+  --ct-surface: oklch(18.5% 0.016 200);
+  --ct-surface-raised: oklch(24% 0.02 200);
+  --ct-border: oklch(28% 0.018 200);
+  --ct-border-strong: oklch(40% 0.024 200);
+
+  /* Text — 15.2:1, 7.6:1, 4.9:1 on --ct-bg */
+  --ct-text: oklch(95% 0.012 180);
+  --ct-text-muted: oklch(76% 0.018 190);
+  --ct-text-subtle: oklch(61% 0.02 195);
+
+  /* Accent — cyan, the "other sector / informational" convention */
+  --ct-accent: oklch(78% 0.13 205);
+  --ct-accent-fg: oklch(15% 0.014 200);
+  --ct-ring: oklch(78% 0.13 205);
+
+  /* Status vocabulary (§6). Named for the ATC convention, not the hue. */
+  --ct-cleared: oklch(80% 0.19 145); /* green — cleared to land */
+  --ct-cleared-fg: oklch(15% 0.014 145);
+  --ct-caution: oklch(84% 0.16 85); /* amber — hold short, advisory */
+  --ct-caution-fg: oklch(15% 0.014 85);
+  --ct-alert: oklch(64% 0.23 25); /* red — go around */
+  --ct-alert-fg: oklch(98% 0.008 25);
+  --ct-inbound: oklch(76% 0.14 230); /* cyan — awaiting clearance */
+  --ct-inbound-fg: oklch(15% 0.014 230);
+  --ct-approach: oklch(84% 0.15 100); /* amber-green — on final */
+  --ct-approach-fg: oklch(15% 0.014 100);
+  --ct-landed: oklch(72% 0.16 300); /* violet — down and parked */
+  --ct-landed-fg: oklch(15% 0.014 300);
+  --ct-dormant: oklch(52% 0.014 200); /* dim — no live data */
+  --ct-dormant-fg: oklch(95% 0.012 180);
+
+  /* Transponder — the liveness dot */
+  --ct-squawk-live: oklch(82% 0.19 145);
+  --ct-squawk-holding: oklch(56% 0.018 200);
+  --ct-squawk-lost: oklch(38% 0.014 200);
+
+  /* Advisory chip — "17 ADVISORIES". Amber by convention: caution, not failure. */
+  --ct-advisory-bg: oklch(28% 0.05 80);
+  --ct-advisory-text: oklch(86% 0.13 85);
+
+  /* Strip rack — the horizontal bands rows are drawn as */
+  --ct-strip-marker: oklch(84% 0.16 85);
+  --ct-scope-line: oklch(22% 0.016 200);
+}
+
+/* Daylight in the tower cabin: high ambient light, so the polarity inverts and
+ * contrast has to rise. Glass-cabin displays are washed out by sun — hues here
+ * are darker and more saturated than their night equivalents to survive it. */
+[data-theme='day-cab'] {
+  color-scheme: light;
+
+  --ct-bg: oklch(97% 0.005 200);
+  --ct-surface: oklch(100% 0 0);
+  --ct-surface-raised: oklch(94.5% 0.008 200);
+  --ct-border: oklch(88% 0.01 200);
+  --ct-border-strong: oklch(76% 0.014 200);
+
+  /* 15.6:1, 7.2:1, 4.7:1 on --ct-bg */
+  --ct-text: oklch(21% 0.018 220);
+  --ct-text-muted: oklch(44% 0.02 215);
+  --ct-text-subtle: oklch(55% 0.018 210);
+
+  --ct-accent: oklch(48% 0.15 225);
+  --ct-accent-fg: oklch(99% 0.002 225);
+  --ct-ring: oklch(48% 0.15 225);
+
+  --ct-cleared: oklch(43% 0.14 148);
+  --ct-cleared-fg: oklch(99% 0.002 148);
+  --ct-caution: oklch(48% 0.13 75);
+  --ct-caution-fg: oklch(99% 0.002 75);
+  --ct-alert: oklch(48% 0.21 25);
+  --ct-alert-fg: oklch(99% 0.002 25);
+  --ct-inbound: oklch(46% 0.15 240);
+  --ct-inbound-fg: oklch(99% 0.002 240);
+  --ct-approach: oklch(46% 0.12 95);
+  --ct-approach-fg: oklch(99% 0.002 95);
+  --ct-landed: oklch(46% 0.18 300);
+  --ct-landed-fg: oklch(99% 0.002 300);
+  --ct-dormant: oklch(52% 0.012 210);
+  --ct-dormant-fg: oklch(99% 0.002 210);
+
+  --ct-squawk-live: oklch(48% 0.15 148);
+  --ct-squawk-holding: oklch(72% 0.014 210);
+  --ct-squawk-lost: oklch(84% 0.008 210);
+
+  --ct-advisory-bg: oklch(93% 0.055 80);
+  --ct-advisory-text: oklch(40% 0.11 62);
+
+  --ct-strip-marker: oklch(52% 0.14 70);
+  --ct-scope-line: oklch(93% 0.008 200);
+}
+
+/* Amber phosphor CRT — the older generation of display, and this app's
+ * accessibility canary. Near-monochrome on purpose: every status resolves to a
+ * shade of amber, so hue carries almost nothing and the icon + label have to do
+ * the work. Only ALERT breaks monochrome, exactly as a real conflict alert did. */
+[data-theme='amber-sector'] {
+  color-scheme: dark;
+
+  --ct-bg: oklch(14% 0.018 55);
+  --ct-surface: oklch(17% 0.022 55);
+  --ct-surface-raised: oklch(23% 0.03 55);
+  --ct-border: oklch(29% 0.035 58);
+  --ct-border-strong: oklch(43% 0.055 60);
+
+  /* 13.9:1, 7.3:1, 4.6:1 on --ct-bg */
+  --ct-text: oklch(90% 0.09 78);
+  --ct-text-muted: oklch(74% 0.11 74);
+  --ct-text-subtle: oklch(60% 0.1 70);
+
+  --ct-accent: oklch(84% 0.14 80);
+  --ct-accent-fg: oklch(14% 0.018 55);
+  --ct-ring: oklch(84% 0.14 80);
+
+  /* Differentiated by luminance, not hue — brightest reads as most urgent. */
+  --ct-cleared: oklch(89% 0.13 88);
+  --ct-cleared-fg: oklch(14% 0.018 55);
+  --ct-caution: oklch(78% 0.13 68);
+  --ct-caution-fg: oklch(14% 0.018 55);
+  --ct-alert: oklch(62% 0.22 30); /* the one hue break */
+  --ct-alert-fg: oklch(97% 0.02 30);
+  --ct-inbound: oklch(70% 0.11 62);
+  --ct-inbound-fg: oklch(14% 0.018 55);
+  --ct-approach: oklch(83% 0.13 78);
+  --ct-approach-fg: oklch(14% 0.018 55);
+  --ct-landed: oklch(58% 0.08 58);
+  --ct-landed-fg: oklch(97% 0.02 58);
+  --ct-dormant: oklch(48% 0.05 58);
+  --ct-dormant-fg: oklch(90% 0.09 78);
+
+  --ct-squawk-live: oklch(88% 0.14 85);
+  --ct-squawk-holding: oklch(52% 0.06 60);
+  --ct-squawk-lost: oklch(34% 0.035 58);
+
+  --ct-advisory-bg: oklch(26% 0.06 62);
+  --ct-advisory-text: oklch(84% 0.13 76);
+
+  --ct-strip-marker: oklch(84% 0.14 80);
+  --ct-scope-line: oklch(20% 0.024 55);
+}

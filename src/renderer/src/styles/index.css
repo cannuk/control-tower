@@ -1,0 +1,138 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/*
+ * `@theme inline` maps the semantic tokens onto Tailwind utilities. `inline` is
+ * load-bearing: it makes the generated utilities reference var(--ct-*) rather
+ * than baking in a resolved value, so swapping [data-theme] restyles the app at
+ * runtime with no rebuild. Dropping `inline` silently freezes the palette.
+ */
+@theme inline {
+  --color-bg: var(--ct-bg);
+  --color-surface: var(--ct-surface);
+  --color-surface-raised: var(--ct-surface-raised);
+  --color-border-base: var(--ct-border);
+  --color-border-strong: var(--ct-border-strong);
+  --color-scope-line: var(--ct-scope-line);
+
+  --color-text: var(--ct-text);
+  --color-text-muted: var(--ct-text-muted);
+  --color-text-subtle: var(--ct-text-subtle);
+
+  --color-accent: var(--ct-accent);
+  --color-accent-fg: var(--ct-accent-fg);
+
+  /* Status vocabulary — ATC convention (see tokens.css) */
+  --color-cleared: var(--ct-cleared);
+  --color-cleared-fg: var(--ct-cleared-fg);
+  --color-caution: var(--ct-caution);
+  --color-caution-fg: var(--ct-caution-fg);
+  --color-alert: var(--ct-alert);
+  --color-alert-fg: var(--ct-alert-fg);
+  --color-inbound: var(--ct-inbound);
+  --color-inbound-fg: var(--ct-inbound-fg);
+  --color-approach: var(--ct-approach);
+  --color-approach-fg: var(--ct-approach-fg);
+  --color-landed: var(--ct-landed);
+  --color-landed-fg: var(--ct-landed-fg);
+  --color-dormant: var(--ct-dormant);
+  --color-dormant-fg: var(--ct-dormant-fg);
+
+  --color-squawk-live: var(--ct-squawk-live);
+  --color-squawk-holding: var(--ct-squawk-holding);
+  --color-squawk-lost: var(--ct-squawk-lost);
+
+  --color-advisory: var(--ct-advisory-bg);
+  --color-advisory-text: var(--ct-advisory-text);
+  --color-strip-marker: var(--ct-strip-marker);
+
+  /* Flight strips and data blocks are fixed-width so the eye scans a column
+   * rather than reading each row. Prose (the flight description) stays
+   * proportional — monospacing a full sentence hurts more than it helps. */
+  --font-data: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--ct-border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    /* The window is frameless, so the body IS the chrome — it must paint. */
+    background-color: var(--ct-bg);
+    color: var(--ct-text);
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+    cursor: default;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ct-ring);
+    outline-offset: 2px;
+  }
+
+  /* Theme swaps are instant; only motion respects the reduced-motion setting. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Frameless-window drag region. Interactive children must opt back out with
+   * .no-drag, or they become undraggable dead zones. */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Data-block field: fixed-width, tight, slightly tracked out like real
+   * display symbology. */
+  .field {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  /*
+   * A cocked strip. Controllers physically rotate a flight progress strip out of
+   * the rack to flag one needing attention — the offset is the signal, visible
+   * from across the room without reading anything. Our equivalent for unread
+   * output: nudge the strip and mark its leading edge.
+   */
+  .strip-cocked {
+    transform: translateX(3px);
+    box-shadow: inset 3px 0 0 0 var(--ct-strip-marker);
+  }
+
+  /* One radar sweep. Slow, subtle — a status heartbeat, not an animation. */
+  @keyframes sweep-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  .animate-sweep {
+    animation: sweep-pulse 2.4s ease-in-out infinite;
+  }
+}

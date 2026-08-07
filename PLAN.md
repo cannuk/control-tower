@@ -371,13 +371,30 @@ fraction of a cent.
 
 ## 9. Milestones
 
-**M0 — Socket-auth spike (do this first; it gates §5 layer 1).**
-`cmux capabilities` reports `"access_mode": "cmuxOnly"`. Every probe so far ran from a
-terminal *inside* cmux. Control Tower is its own app, so the socket may reject it or
-require the password from cmux Settings (`--password` / `CMUX_SOCKET_PASSWORD`). Verify
-from an outside process. If it's blocked: fall back to reading cmux's session JSON
-directly (already proven to contain title + sessionId) and focus via the CLI binary, which
-inherits cmux's own trust. **This is the highest-risk unknown in the plan.**
+**M0 — Socket-auth spike. ✅ RESOLVED — the socket is open to any process running as you.**
+
+The concern was that `cmux capabilities` reports `"access_mode": "cmuxOnly"` and every probe
+had run from a terminal *inside* cmux, which turns out to inject a per-surface capability
+token into the environment (`CMUX_SOCKET_CAPABILITY=v1.<…>.<…>`, alongside
+`CMUX_SOCKET_PATH=~/.local/state/cmux/cmux.sock`). If that token were the gate, an outside
+Electron app would have been locked out.
+
+It isn't. Verified with a fully scrubbed environment — `env -i HOME=… PATH=/usr/bin:/bin` —
+that **both** paths work with no token, no password, and no `CMUX_SOCKET_PATH`:
+
+- `cmux ping` → `PONG` (the CLI finds the default socket path itself)
+- `cmux rpc surface.list '{"allWorkspaces":true}'` → full surface list
+- `cmux rpc surface.focus '{"surface_id":"…"}'` → succeeded, returning the surface, pane,
+  window and workspace refs (tested against the already-focused surface, so visually a no-op)
+
+`access_mode: "cmuxOnly"` reports the same value from outside, so it does not describe caller
+trust. **The actual security boundary is filesystem permissions**: the socket is
+`srw-------`, owner-only. Any process running as this user has complete control of cmux.
+
+Consequences: Control Tower talks to the cmux API directly, with no credential to store and
+no fallback to scraping its session JSON. The `--password` / `CMUX_SOCKET_PASSWORD` path is
+for remote or multi-user access, not for us. Worth stating the flip side plainly, though —
+this is a permissive local surface, and anything running as you can drive your terminal.
 
 **M1 — Skeleton.** electron-vite + React 19 + Tailwind 4 + shadcn/ui. Build the §3 token layer
 *first* — semantic custom properties, two palettes to prove the swap, contrast-checked — then
