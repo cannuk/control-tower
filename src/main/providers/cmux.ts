@@ -68,6 +68,30 @@ export function detect(): boolean {
   return findBinary() !== null
 }
 
+/**
+ * Open a new workspace running a command.
+ *
+ * Uses the `workspace create` CLI verb rather than the `workspace.create` socket
+ * method, and that is not a style preference — **the socket call silently ignores
+ * `command`.** Measured side by side: a workspace created over the socket with
+ * `{cwd, command}` comes up at a bare shell with the command nowhere in its
+ * scrollback, while the same request through the CLI runs it. Both return success.
+ *
+ * That one difference was the whole of two bugs: resuming a dead session and
+ * launching a filed plan both opened an empty terminal and did nothing else.
+ *
+ * The command is still shell-quoted by the caller. `--command` is documented as
+ * "send text+Enter to the new workspace", so cmux types it into a shell — argv here
+ * only protects the cmux invocation, not the line the shell then parses.
+ */
+async function createWorkspace(cwd: string, command: string): Promise<void> {
+  const bin = findBinary()
+  if (!bin) throw new Error('cmux CLI not found')
+  await run(bin, ['workspace', 'create', '--cwd', cwd, '--command', command, '--focus', 'true'], {
+    timeout: 10_000,
+  })
+}
+
 async function rpc<T>(method: string, params: unknown): Promise<T> {
   const bin = findBinary()
   if (!bin) throw new Error('cmux CLI not found')
@@ -254,7 +278,7 @@ export async function resume(sessionId: string, cwd: string): Promise<TuneResult
   const command = recorded ?? `claude --resume '${sessionId}'`
 
   try {
-    await rpc('workspace.create', { cwd, command, focus: true })
+    await createWorkspace(cwd, command)
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause)
     return { ok: false, reason: `could not start a workspace: ${detail}` }
@@ -319,7 +343,7 @@ export async function launch(cwd: string, prompt: string): Promise<TuneResult> {
   const quoted = `'${prompt.replace(/'/g, `'\\''`)}'`
 
   try {
-    await rpc('workspace.create', { cwd, command: `claude ${quoted}`, focus: true })
+    await createWorkspace(cwd, `claude ${quoted}`)
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause)
     return { ok: false, reason: `could not start a workspace: ${detail}` }

@@ -12,6 +12,7 @@ import {
 } from '../shared/types.js'
 import * as cmux from './providers/cmux.js'
 import { collect } from './collectors/snapshot.js'
+import { readRegistry } from './collectors/registry.js'
 import * as cacheStore from './store/cache.js'
 import * as staging from './store/staging.js'
 import * as watcher from './watcher.js'
@@ -252,14 +253,33 @@ ipcMain.handle('session:tune', async (_e, sessionId: string, cwd: string): Promi
     return { ok: false, reason: 'no session id' }
   }
 
-  const focused = await cmux.focus(sessionId)
-  if (focused.ok) return focused
+  /**
+   * Liveness decides this, not whether cmux still has a tab.
+   *
+   * The previous order tried `focus` first and only resumed when it failed — but a
+   * cmux tab outlives the process inside it. Quit a session and its workspace is
+   * still there, so focus succeeded and handed you a bare shell: the session was
+   * never resumed, and the reported bug was exactly that ("it just opens terminal").
+   *
+   * The registry is re-read here rather than trusted from the renderer's snapshot,
+   * which can be a sweep behind — long enough for a session to have exited between
+   * the board you are looking at and the click.
+   */
+  const { entries } = await readRegistry()
+  const alive = entries.some((e) => e.sessionId === sessionId)
 
-  // No live tab, but the session is still resumable — so resume it rather than
-  // reporting a dead end. This is the ctrl+C-and-left-it-there case, which is
-  // exactly when you most want to get back in.
+  if (alive) {
+    const focused = await cmux.focus(sessionId)
+    if (focused.ok) return focused
+    // Running, but cmux has no tab for it — resuming would start a second copy, so
+    // say so rather than quietly duplicating the session.
+    return focused
+  }
+
+  // Not running. Resume it, which is the whole point of clicking a row whose
+  // process is gone — the ctrl+C-and-left-it-there case.
   if (typeof cwd === 'string' && cwd.length > 0) return cmux.resume(sessionId, cwd)
-  return focused
+  return { ok: false, reason: 'no directory recorded for this session' }
 })
 
 ipcMain.handle('staging:list', (): Departure[] => staging.list())
