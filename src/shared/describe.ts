@@ -109,7 +109,7 @@ function threadClause(advisories: number, advisors: Advisor[], hadReview: boolea
  * Outdated threads, as their own clause rather than trailing the breakdown.
  *
  * Appended to the per-author list it read as one more author: "…4 from
- * luiscarrero-gladly, 10 on outdated code" parses as a fourth entry on first
+ * reviewer-c, 10 on outdated code" parses as a fourth entry on first
  * glance. It earns a mention because outdated threads are usually nits already
  * dealt with, so ten of nineteen changes what the number means.
  */

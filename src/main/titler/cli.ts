@@ -79,8 +79,8 @@ function ensureTitlerDir(): string {
  * Claude mangles a cwd into a directory name by replacing every non-alphanumeric
  * character with `-`, not just path separators. Getting that wrong is how the
  * first version of this silently pruned nothing: it produced
- * `-Users-sean@gladly.com-Library-Application Support-…` while the real directory
- * was `-Users-sean-gladly-com-Library-Application-Support-…`, because `@`, `.` and
+ * `-Users-alex@example.com-Library-Application Support-…` while the real directory
+ * was `-Users-alex-example-com-Library-Application-Support-…`, because `@`, `.` and
  * spaces are all collapsed too.
  */
 export function projectDir(): string {

@@ -84,7 +84,7 @@ const SYNTHETIC = [
   '<local-command-stdout>',
   '<local-command-stderr>',
   // Tool output routed back through the user role. Measured leaking into a
-  // titling input as `<bash-stdout> 612 /tmp/lovesac.jwt</bash-stdout>`, which
+  // titling input as `<bash-stdout> 612 /tmp/acme.jwt</bash-stdout>`, which
   // would have been summarised as though it were a request.
   '<bash-input>',
   '<bash-stdout>',

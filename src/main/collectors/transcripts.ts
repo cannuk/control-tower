@@ -232,7 +232,7 @@ function recordedCwd(path: string): string | null {
  * character with `-`, not just separators, so the transform is lossy in a way no
  * decode can undo: `Claude_Cowork_Plugins_Skills` and `Claude/Cowork/Plugins/Skills`
  * are the same directory name, and any path containing `@` or `.` — every path under
- * a home directory like `sean@gladly.com` — decodes to something that does not exist.
+ * a home directory like `alex@example.com` — decodes to something that does not exist.
  *
  * The previous version guessed by turning `-` back into `/` and kept the result only
  * if it existed on disk. Measured against 116 real transcripts it was right **zero**

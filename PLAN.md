@@ -60,8 +60,8 @@ Four independent local sources, joined on the Claude `sessionId`.
 - **PR links** are first-class records on their own line:
   ```json
   {"type":"pr-link","sessionId":"…","prNumber":2520,
-   "prUrl":"https://github.com/sagansystems/chat-sdk/pull/2520",
-   "prRepository":"sagansystems/chat-sdk","timestamp":"2026-08-01T01:25:02.899Z"}
+   "prUrl":"https://github.com/example-org/web-app/pull/2520",
+   "prRepository":"example-org/web-app","timestamp":"2026-08-01T01:25:02.899Z"}
   ```
   Written on `gh pr create` and on later REST linking. Mapping is many-to-many: one PR can
   have several sessions, one session several PRs.
@@ -105,7 +105,7 @@ yet. So the socket is the exact-and-live source, and cmux's persisted store
 
 ### 2.4 GitHub — PR state
 Via the `gh` CLI (already authenticated as `cannuk`, and that account can read the
-`sagansystems` repos — verified). Shelling out to `gh` avoids storing a token.
+`example-org` repos — verified). Shelling out to `gh` avoids storing a token.
 
 One GraphQL query per repo, batching all PR numbers that appear in the session list, with a
 fragment per PR pulling `state`, `isDraft`, `reviewDecision`, `statusCheckRollup.state`, and

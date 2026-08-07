@@ -56,7 +56,7 @@ export function heuristicTitle(firstMessage: string | null): string | null {
   )
 
   // Otherwise keep the host and drop the path: a customer hostname is usually the
-  // subject ("phase 1 for rothys.com"), while the path is noise. Code-forge hosts
+  // subject ("phase 1 for acme.com"), while the path is noise. Code-forge hosts
   // are the exception — "github.com" on its own says nothing about the task.
   text = text.replace(/https?:\/\/([^\s/]+)(\/\S*)?/g, (_m, host: string) =>
     /^(?:www\.)?(?:github|gitlab|bitbucket)\.com$/i.test(host) ? '' : host,

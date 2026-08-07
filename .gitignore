@@ -1,6 +1,43 @@
+# Dependencies and build output
 node_modules/
 out/
 dist/
+release/
+.vite/
+coverage/
+
+# Electron-builder scratch, and the iconset that icon.icns is generated from.
+# icon.svg / icon.png / icon.icns are the tracked artefacts; the .iconset folder is
+# an intermediate that `iconutil` consumes and does not need to survive.
+resources/icon.iconset/
+resources/icon-*.png
+
+# Credentials. Nothing here should ever hold one — the app resolves the Claude
+# credential at runtime and shells out to `gh` for GitHub rather than storing a
+# token — so these patterns exist to make an accident impossible, not to cover a
+# known case.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.mobileprovision
+
+# Editor and OS
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.eslintcache
+
+# Claude Code's per-project state. `settings.local.json` records machine-specific
+# permissions, and the session/todo directories are this repo's own transcripts —
+# which is exactly the data Control Tower reads, and not data it should ship.
+.claude/settings.local.json
+.claude/todos/
+.claude/sessions/
+
+# Logs and TypeScript incremental state
 *.log
 *.tsbuildinfo
