@@ -1,10 +1,17 @@
-import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
 import { join } from 'node:path'
 import Store from 'electron-store'
-import { THEMES, type SessionSnapshot, type ThemeName, type TuneResult } from '../shared/types.js'
+import {
+  THEMES,
+  type Departure,
+  type SessionSnapshot,
+  type ThemeName,
+  type TuneResult,
+} from '../shared/types.js'
 import * as cmux from './providers/cmux.js'
 import { collect } from './collectors/snapshot.js'
 import * as cacheStore from './store/cache.js'
+import * as staging from './store/staging.js'
 import * as watcher from './watcher.js'
 
 /**
@@ -141,6 +148,13 @@ function createWindow(): void {
   }
 }
 
+/** Empty and whitespace-only input mean "not set", not "set to a blank string". */
+function blankToNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 function debounce(fn: () => void, ms: number): () => void {
   let t: NodeJS.Timeout | undefined
   return () => {
@@ -209,6 +223,69 @@ ipcMain.handle('session:tune', async (_e, sessionId: string, cwd: string): Promi
   // exactly when you most want to get back in.
   if (typeof cwd === 'string' && cwd.length > 0) return cmux.resume(sessionId, cwd)
   return focused
+})
+
+ipcMain.handle('staging:list', (): Departure[] => staging.list())
+
+ipcMain.handle(
+  'staging:add',
+  (_e, title: string, notes: string | null, cwd: string | null): Departure | null => {
+    const clean = typeof title === 'string' ? title.trim() : ''
+    // A blank flight plan is a row you cannot identify or act on, so it is refused
+    // here rather than stored and rendered as an empty strip.
+    if (clean.length === 0) return null
+    return staging.add(clean, blankToNull(notes), blankToNull(cwd))
+  },
+)
+
+ipcMain.handle(
+  'staging:update',
+  (_e, id: number, fields: { title?: string; notes?: string | null; cwd?: string | null }) => {
+    const next: { title?: string; notes?: string | null; cwd?: string | null } = {}
+    if (typeof fields?.title === 'string' && fields.title.trim().length > 0) {
+      next.title = fields.title.trim()
+    }
+    if (fields?.notes !== undefined) next.notes = blankToNull(fields.notes)
+    if (fields?.cwd !== undefined) next.cwd = blankToNull(fields.cwd)
+    staging.update(id, next)
+  },
+)
+
+ipcMain.handle('staging:remove', (_e, id: number) => staging.remove(id))
+
+/**
+ * Turn a filed departure into a live session.
+ *
+ * On success the row is deleted: it has taken off, and the session it became will
+ * appear on EN ROUTE on the next sweep. Leaving it would show the same work twice on
+ * two boards. There is a gap of a second or two where it is on neither — the session
+ * has to write a transcript before the watcher can see it — which is the cost of not
+ * keeping a second source of truth for "is this thing running yet".
+ *
+ * Deleted only when the workspace was actually created. A failed launch keeps the
+ * plan, because losing what you typed because cmux was not running would be the
+ * worst possible outcome here.
+ */
+ipcMain.handle('staging:launch', async (_e, id: number): Promise<TuneResult> => {
+  const item = staging.get(id)
+  if (!item) return { ok: false, reason: 'that flight plan no longer exists' }
+  if (!item.cwd) {
+    return { ok: false, reason: 'no directory set — edit the plan and choose where to run it' }
+  }
+
+  const prompt = item.notes ? `${item.title}\n\n${item.notes}` : item.title
+  const result = await cmux.launch(item.cwd, prompt)
+  if (result.ok) staging.remove(id)
+  return result
+})
+
+/** Native directory picker, so a cwd never has to be typed from memory. */
+ipcMain.handle('dialog:chooseDirectory', async (): Promise<string | null> => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    message: 'Where should this session run?',
+  })
+  return canceled ? null : (filePaths[0] ?? null)
 })
 
 ipcMain.handle('shell:openExternal', (_e, url: string) => {

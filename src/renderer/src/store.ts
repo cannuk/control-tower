@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Board, SessionSnapshot, ThemeName } from '../../shared/types.js'
+import type { Board, Departure, SessionSnapshot, ThemeName } from '../../shared/types.js'
 
 interface State {
   theme: ThemeName
@@ -32,11 +32,28 @@ interface State {
    * flash continuously and mean nothing.
    */
   scanId: number
+  /**
+   * Filed departures, held in the renderer rather than re-fetched per render.
+   *
+   * Unlike sessions there is no watcher pushing these — nothing outside this app
+   * changes them — so the list is authoritative once loaded and every mutation
+   * refreshes it from the main process rather than patching it locally. Patching
+   * would mean two implementations of the same ordering rule.
+   */
+  departures: Departure[]
 
   init: () => Promise<void>
   setTheme: (theme: ThemeName) => Promise<void>
   setBoard: (board: Board) => void
   refresh: (announce?: boolean) => Promise<void>
+  loadDepartures: () => Promise<void>
+  addDeparture: (title: string, notes: string | null, cwd: string | null) => Promise<boolean>
+  updateDeparture: (
+    id: number,
+    fields: { title?: string; notes?: string | null; cwd?: string | null },
+  ) => Promise<void>
+  removeDeparture: (id: number) => Promise<void>
+  launchDeparture: (id: number) => Promise<string | null>
   bumpTick: () => void
   /** Open a panel, or pass the open one to close it. */
   toggleOverlay: (overlay: Exclude<Overlay, null>) => void
@@ -65,6 +82,7 @@ export const useStore = create<State>((set, get) => ({
   overlay: null,
   titling: true,
   scanId: 0,
+  departures: [],
 
   init: async () => {
     try {
@@ -74,7 +92,7 @@ export const useStore = create<State>((set, get) => ({
       ])
       applyTheme(theme)
       set({ theme, titling })
-      await get().refresh(false)
+      await Promise.all([get().refresh(false), get().loadDepartures()])
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
     }
@@ -87,6 +105,47 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setBoard: (board) => set({ board }),
+
+  loadDepartures: async () => {
+    set({ departures: await window.controlTower.listDepartures() })
+  },
+
+  /** False when the main process refused the row — an empty title. */
+  addDeparture: async (title, notes, cwd) => {
+    const created = await window.controlTower.addDeparture(title, notes, cwd)
+    if (!created) return false
+    await get().loadDepartures()
+    return true
+  },
+
+  updateDeparture: async (id, fields) => {
+    await window.controlTower.updateDeparture(id, fields)
+    await get().loadDepartures()
+  },
+
+  removeDeparture: async (id) => {
+    await window.controlTower.removeDeparture(id)
+    await get().loadDepartures()
+  },
+
+  /**
+   * Launch, returning a failure reason or null on success.
+   *
+   * Reloads the list either way: on success the row is gone from the main process's
+   * store, and on failure it deliberately is not, so the caller does not have to know
+   * which happened to render the right thing.
+   */
+  launchDeparture: async (id) => {
+    const result = await window.controlTower.launchDeparture(id)
+    await get().loadDepartures()
+    if (result.ok) {
+      // The new session lands on EN ROUTE, so follow it there rather than leaving the
+      // user looking at the queue it just left.
+      set({ board: 'en-route' })
+      return null
+    }
+    return result.reason
+  },
 
   /**
    * A sweep. `announce` is false for the one fired during startup — the app opening

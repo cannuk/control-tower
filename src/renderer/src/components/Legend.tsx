@@ -42,7 +42,10 @@ const STATUS_ORDER: PrStatus[] = [
  * without reading the source.
  */
 const BOARDS: [string, string][] = [
-  ['HOLDING', 'Staged work you intend to start — not a session yet'],
+  [
+    'DEPARTURES',
+    'Flight plans you filed — work you intend to start, with no session yet. Launching one opens a terminal in the directory you chose and starts a session with the plan as its prompt',
+  ],
   [
     'EN ROUTE',
     'A running session touched in the last 8 hours, with no PR yet or no human review yet. An exited session is not in flight, however recently you left it. CodeRabbit does not count as a reviewer',

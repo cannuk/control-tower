@@ -22,12 +22,12 @@ interface BoardSpec {
  * noticeably thinner than the other reads as an accident.
  */
 export function Tabs({
-  holdingCount,
+  departuresCount,
   enRouteCount,
   approachCount,
   landedCount,
 }: {
-  holdingCount: number
+  departuresCount: number
   enRouteCount: number
   approachCount: number
   landedCount: number
@@ -36,10 +36,10 @@ export function Tabs({
 
   const boards: BoardSpec[] = [
     {
-      id: 'holding',
-      label: 'HOLDING',
-      count: holdingCount,
-      title: 'Holding short — work staged for a future session',
+      id: 'departures',
+      label: 'DEPARTURES',
+      count: departuresCount,
+      title: 'Filed flight plans — work you intend to start, not a session yet',
     },
     {
       id: 'en-route',

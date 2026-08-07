@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { PlaneTakeoff, Radar } from 'lucide-react'
+import { Radar } from 'lucide-react'
 import { FlightStrip } from './components/FlightStrip.js'
+import { Departures } from './components/Departures.js'
 import { Legend } from './components/Legend.js'
 import { Preferences } from './components/Preferences.js'
 import { Tabs } from './components/Tabs.js'
@@ -9,8 +10,18 @@ import { splitByBoard } from '../../shared/boards.js'
 import { useStore } from './store.js'
 
 export function App(): React.JSX.Element {
-  const { init, snapshot, board, error, bumpTick, overlay, closeOverlay, subscribe, scanId } =
-    useStore()
+  const {
+    init,
+    snapshot,
+    board,
+    error,
+    bumpTick,
+    overlay,
+    closeOverlay,
+    subscribe,
+    scanId,
+    departures,
+  } = useStore()
 
   useEffect(() => {
     void init()
@@ -63,7 +74,7 @@ export function App(): React.JSX.Element {
 
       <TitleBar />
       <Tabs
-        holdingCount={0}
+        departuresCount={departures.length}
         enRouteCount={enRoute.length}
         approachCount={approach.length}
         landedCount={landed.length}
@@ -76,15 +87,9 @@ export function App(): React.JSX.Element {
           </p>
         )}
 
-        {!error && board === 'holding' && (
-          <Placeholder
-            icon={<PlaneTakeoff size={20} aria-hidden />}
-            title="HOLDING SHORT"
-            body="A staging area for work you intend to pick up — add an item here and launch it as a session later. Not built yet."
-          />
-        )}
+        {!error && board === 'departures' && <Departures />}
 
-        {!error && board !== 'holding' && strips.length === 0 && (
+        {!error && board !== 'departures' && strips.length === 0 && (
           <Placeholder
             icon={<Radar size={20} aria-hidden />}
             title={EMPTY[board].title}

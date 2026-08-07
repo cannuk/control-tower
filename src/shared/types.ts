@@ -207,9 +207,9 @@ export function squawk(sessionId: string): string {
  * process; it says nothing about whether you owe anybody anything. Position in
  * the review pipeline does.
  */
-export type Board = 'holding' | 'en-route' | 'approach' | 'landed'
+export type Board = 'departures' | 'en-route' | 'approach' | 'landed'
 
-export const BOARDS: Board[] = ['holding', 'en-route', 'approach', 'landed']
+export const BOARDS: Board[] = ['departures', 'en-route', 'approach', 'landed']
 
 /**
  * This PR is on approach: still flying, and a human has been in the loop.
@@ -271,3 +271,29 @@ export function isOpen(pr: PrRef): boolean {
  */
 export type TuneResult =
   { ok: true; ref: string; resumed?: boolean } | { ok: false; reason: string }
+
+/**
+ * A filed flight plan: work you intend to start, before any session exists.
+ *
+ * The one thing on the board that Control Tower *owns* rather than observes.
+ * Everything else here is derived from a transcript, a process or GitHub and can be
+ * rebuilt by rescanning; these rows exist only because you typed them, which is why
+ * they live in their own store with no schema-version rebuild (see store/staging.ts).
+ */
+export interface Departure {
+  id: number
+  /** One line. Becomes the strip headline, and the first line of the prompt. */
+  title: string
+  /** Optional detail, sent to the session as the rest of the prompt. */
+  notes: string | null
+  /**
+   * Where to start it. Optional when filing so an idea can be captured without
+   * deciding, but required to launch — there is no sensible default directory for
+   * "go and do this", and guessing one would start the session in the wrong repo.
+   */
+  cwd: string | null
+  createdAt: number
+}
+
+/** What a launch attempt reports back. */
+export type LaunchResult = { ok: true } | { ok: false; reason: string }

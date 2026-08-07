@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { SessionSnapshot, ThemeName, TuneResult } from '../shared/types.js'
+import type { Departure, SessionSnapshot, ThemeName, TuneResult } from '../shared/types.js'
 
 /**
  * The entire renderer→main surface. Deliberately a fixed, named list rather
@@ -28,6 +28,22 @@ const api = {
   },
   closeWindow: (): Promise<void> => ipcRenderer.invoke('window:close'),
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
+
+  // DEPARTURES. `add` resolves null when the title was blank — the main process
+  // refuses it rather than storing a row that cannot be identified.
+  listDepartures: (): Promise<Departure[]> => ipcRenderer.invoke('staging:list'),
+  addDeparture: (
+    title: string,
+    notes: string | null,
+    cwd: string | null,
+  ): Promise<Departure | null> => ipcRenderer.invoke('staging:add', title, notes, cwd),
+  updateDeparture: (
+    id: number,
+    fields: { title?: string; notes?: string | null; cwd?: string | null },
+  ): Promise<void> => ipcRenderer.invoke('staging:update', id, fields),
+  removeDeparture: (id: number): Promise<void> => ipcRenderer.invoke('staging:remove', id),
+  launchDeparture: (id: number): Promise<TuneResult> => ipcRenderer.invoke('staging:launch', id),
+  chooseDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:chooseDirectory'),
 }
 
 export type ControlTowerApi = typeof api

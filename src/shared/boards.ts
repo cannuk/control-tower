@@ -194,7 +194,7 @@ export function sessionsOn(boards: Boards, board: Board): Session[] {
       return boards.enRoute
     case 'landed':
       return boards.landed
-    case 'holding':
+    case 'departures':
       return []
   }
 }

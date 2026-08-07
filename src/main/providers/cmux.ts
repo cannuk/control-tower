@@ -298,3 +298,38 @@ function persistedResumeCommands(): Map<string, string> {
   }
   return bySession
 }
+
+/**
+ * Start a brand-new session for a filed departure.
+ *
+ * The same `workspace.create` call `resume` uses, with a fresh `claude` invocation
+ * instead of a recorded resume command. Claude Code takes an initial prompt as a
+ * positional argument, so the whole flight plan travels with the launch and the
+ * session opens already knowing the task.
+ *
+ * The prompt is single-quoted for the shell with `'` rewritten as `'\''` — close the
+ * quote, emit an escaped quote, reopen. That is the only POSIX-safe way to pass
+ * arbitrary text through a shell string, and it matters here more than anywhere else
+ * in this app: this is the one place user-authored prose becomes part of a command
+ * line. Newlines need no special handling inside single quotes.
+ */
+export async function launch(cwd: string, prompt: string): Promise<TuneResult> {
+  if (!detect()) return { ok: false, reason: 'cmux is not installed on this machine' }
+
+  const quoted = `'${prompt.replace(/'/g, `'\\''`)}'`
+
+  try {
+    await rpc('workspace.create', { cwd, command: `claude ${quoted}`, focus: true })
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    return { ok: false, reason: `could not start a workspace: ${detail}` }
+  }
+
+  try {
+    await run('/usr/bin/open', ['-b', BUNDLE_ID], { timeout: 5000 })
+  } catch {
+    /* the tab exists either way; only focus is best-effort */
+  }
+
+  return { ok: true, ref: 'launched', resumed: false }
+}
