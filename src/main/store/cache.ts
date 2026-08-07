@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
+import type { Advisor, Reviewer } from '../../shared/types.js'
 
 /**
  * Local durable store (PLAN.md §4).
@@ -36,7 +37,7 @@ export function open(): DatabaseSync {
   // Anything expensive to recompute (scan offsets, PR links, generated titles)
   // is never dropped by this.
   db.exec('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)')
-  const PR_STATUS_SCHEMA = 3
+  const PR_STATUS_SCHEMA = 4
   const current = (
     db.prepare("SELECT value FROM schema_meta WHERE key = 'pr_status'").get() as
       { value: number } | undefined
@@ -83,6 +84,12 @@ export function open(): DatabaseSync {
       terminal    INTEGER NOT NULL,
       -- A non-Bot review or review thread exists. The board's core distinction.
       human_reviewed INTEGER NOT NULL DEFAULT 0,
+      -- Who the unresolved threads belong to, and where each reviewer landed, both
+      -- as JSON arrays. Stored encoded rather than in child tables because this is
+      -- a pure cache that is always read whole and rebuilt on any shape change —
+      -- two extra tables would buy queries nothing here ever runs.
+      advisors    TEXT NOT NULL DEFAULT '[]',
+      reviewers   TEXT NOT NULL DEFAULT '[]',
       merged_at   TEXT,
       fetched_at  INTEGER NOT NULL,
       PRIMARY KEY (repository, number)
@@ -224,10 +231,29 @@ export interface StoredPrStatus {
   status: string
   advisories: number
   outdatedAdvisories: number
+  advisors: Advisor[]
+  reviewers: Reviewer[]
   terminal: boolean
   humanReviewed: boolean
   mergedAt: string | null
   fetchedAt: number
+}
+
+/**
+ * Decode a JSON column without letting a bad row take the sweep down.
+ *
+ * These columns are written by this process, so malformed content should be
+ * impossible — but they are also the first columns here whose shape can drift
+ * ahead of the schema version, and an APPROACH paragraph is not worth a crash.
+ */
+function decodeJson<T>(raw: string | null): T[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? (parsed as T[]) : []
+  } catch {
+    return []
+  }
 }
 
 /** How long an open PR's status is served from cache before a refetch. */
@@ -264,14 +290,16 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
   const database = open()
   const upsert = database.prepare(
     `INSERT INTO pr_status (repository, number, title, status, advisories, outdated, terminal,
-                            human_reviewed, merged_at, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            human_reviewed, advisors, reviewers, merged_at, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(repository, number) DO UPDATE SET title = excluded.title,
                                                   status = excluded.status,
                                                   advisories = excluded.advisories,
                                                   outdated = excluded.outdated,
                                                   terminal = excluded.terminal,
                                                   human_reviewed = excluded.human_reviewed,
+                                                  advisors = excluded.advisors,
+                                                  reviewers = excluded.reviewers,
                                                   merged_at = excluded.merged_at,
                                                   fetched_at = excluded.fetched_at`,
   )
@@ -287,6 +315,8 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
         r.outdatedAdvisories,
         r.terminal ? 1 : 0,
         r.humanReviewed ? 1 : 0,
+        JSON.stringify(r.advisors),
+        JSON.stringify(r.reviewers),
         r.mergedAt,
         r.fetchedAt,
       )
@@ -303,7 +333,7 @@ export function prStatuses(): Map<string, StoredPrStatus> {
   const rows = open()
     .prepare(
       `SELECT repository, number, title, status, advisories, outdated, terminal,
-                     human_reviewed, merged_at, fetched_at
+                     human_reviewed, advisors, reviewers, merged_at, fetched_at
               FROM pr_status`,
     )
     .all() as {
@@ -315,6 +345,8 @@ export function prStatuses(): Map<string, StoredPrStatus> {
     outdated: number
     terminal: number
     human_reviewed: number
+    advisors: string | null
+    reviewers: string | null
     merged_at: string | null
     fetched_at: number
   }[]
@@ -328,6 +360,8 @@ export function prStatuses(): Map<string, StoredPrStatus> {
         status: r.status,
         advisories: r.advisories,
         outdatedAdvisories: r.outdated,
+        advisors: decodeJson<Advisor>(r.advisors),
+        reviewers: decodeJson<Reviewer>(r.reviewers),
         terminal: r.terminal === 1,
         humanReviewed: r.human_reviewed === 1,
         mergedAt: r.merged_at,

@@ -38,7 +38,7 @@ function toPrRefs(
   statuses: Map<string, cache.StoredPrStatus>,
 ): PrRef[] {
   return (links.get(sessionId) ?? []).map((link) => {
-    const known = statuses.get(link.repository + "#" + link.number)
+    const known = statuses.get(link.repository + '#' + link.number)
     return {
       number: link.number,
       url: link.url,
@@ -47,6 +47,8 @@ function toPrRefs(
       status: (known?.status as PrRef['status']) ?? 'no-contact',
       advisories: known?.advisories ?? 0,
       outdatedAdvisories: known?.outdatedAdvisories ?? 0,
+      advisors: known?.advisors ?? [],
+      reviewers: known?.reviewers ?? [],
       humanReviewed: known?.humanReviewed ?? false,
       mergedAt: known?.mergedAt ?? null,
     }
@@ -87,10 +89,7 @@ function resolveSummary(
   return { summary: null, summarySource: null, sessionState: state }
 }
 
-function transponderFor(
-  status: 'busy' | 'idle' | null,
-  isLive: boolean,
-): Transponder {
+function transponderFor(status: 'busy' | 'idle' | null, isLive: boolean): Transponder {
   if (!isLive) return 'no-contact'
   if (status === 'busy') return 'airborne'
   if (status === 'idle') return 'holding'

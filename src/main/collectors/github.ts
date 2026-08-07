@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { promisify } from 'node:util'
-import type { PrStatus } from '../../shared/types.js'
+import type { Advisor, PrStatus, Reviewer } from '../../shared/types.js'
 import * as cache from '../store/cache.js'
 
 const run = promisify(execFile)
@@ -32,22 +32,34 @@ const GH_CANDIDATES = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh
  *
  * GitHub types a review author as `User` or `Bot`, which is the only reliable way
  * to tell a person's review from CodeRabbit's — matching on login would need a
- * hardcoded list of every bot you might install. `reviews` is capped at 30
- * because the flag only asks *whether* a human participated; the thread scan
- * supplies the counts.
+ * hardcoded list of every bot you might install.
+ *
+ * `login` and review `state` are here so the APPROACH board can say who is waiting
+ * on what without a model in the loop. Both come free with authors we were already
+ * selecting: the query is one field wider, not one request longer.
+ *
+ * `reviews` is 100 rather than 30 because a stance has to be the *latest* review
+ * per person — someone who requested changes and later approved must not still read
+ * as blocking — and a long-running PR accumulates COMMENTED reviews that would
+ * otherwise push the decisive ones out of the window.
  */
 const FRAGMENT = `
 fragment F on PullRequest {
   number title state isDraft reviewDecision mergedAt
-  reviews(first: 30) { nodes { author { __typename } } }
+  author { login }
+  reviews(first: 100) { nodes { state author { __typename login } } }
   reviewThreads(first: 100) {
-    nodes { isResolved isOutdated comments(first: 1) { nodes { author { __typename } } } }
+    nodes {
+      isResolved isOutdated
+      comments(first: 1) { nodes { author { __typename login } } }
+    }
   }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`
 
 interface Author {
   __typename: string
+  login?: string
 }
 
 interface GraphQlPr {
@@ -57,7 +69,8 @@ interface GraphQlPr {
   isDraft: boolean
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null
   mergedAt: string | null
-  reviews: { nodes: { author: Author | null }[] }
+  author: { login: string } | null
+  reviews: { nodes: { state: string; author: Author | null }[] }
   reviewThreads: {
     nodes: {
       isResolved: boolean
@@ -71,6 +84,50 @@ interface GraphQlPr {
 /** A null author is a deleted account — treat as human, not as a bot. */
 function isBot(author: Author | null | undefined): boolean {
   return author?.__typename === 'Bot'
+}
+
+/** A deleted account still owns its threads, so it needs a name to be counted. */
+const loginOf = (author: Author | null | undefined): string => author?.login ?? 'someone'
+
+/**
+ * Each human's *current* position, from every review they have posted.
+ *
+ * Three rules, all load-bearing. Reviews arrive oldest-first, so later ones
+ * overwrite earlier ones — otherwise a reviewer who requested changes and then
+ * approved would still read as blocking. COMMENTED never overwrites a verdict:
+ * GitHub records a plain comment as a review, so a follow-up remark after an
+ * approval would otherwise downgrade that approval to "commented". And the author
+ * is skipped: GitHub does not let you review your own PR, so every "review" of
+ * yours is a comment, and counting it made #2471 read as "cannuk commented, no
+ * verdict yet" when in truth nobody had looked at it.
+ */
+function reviewersOf(pr: GraphQlPr): Reviewer[] {
+  const stances = new Map<string, Reviewer['stance']>()
+  for (const review of pr.reviews.nodes) {
+    if (isBot(review.author)) continue
+    const login = loginOf(review.author)
+    if (login === pr.author?.login) continue
+    if (review.state === 'APPROVED') stances.set(login, 'approved')
+    else if (review.state === 'CHANGES_REQUESTED') stances.set(login, 'changes-requested')
+    else if (review.state === 'COMMENTED' && !stances.has(login)) stances.set(login, 'commented')
+    // DISMISSED and PENDING are deliberately ignored: a dismissed review no longer
+    // describes anyone's position, and a pending one has not been posted.
+  }
+  return [...stances].map(([login, stance]) => ({ login, stance }))
+}
+
+/** Unresolved threads grouped by whoever opened them, busiest first. */
+function advisorsOf(threads: { isOutdated: boolean; login: string }[]): Advisor[] {
+  const byLogin = new Map<string, Advisor>()
+  for (const thread of threads) {
+    const existing = byLogin.get(thread.login) ?? { login: thread.login, threads: 0, outdated: 0 }
+    existing.threads += 1
+    if (thread.isOutdated) existing.outdated += 1
+    byLogin.set(thread.login, existing)
+  }
+  return [...byLogin.values()].sort(
+    (a, b) => b.threads - a.threads || a.login.localeCompare(b.login),
+  )
 }
 
 function findGh(): string | null {
@@ -155,9 +212,24 @@ export async function refresh(): Promise<string[]> {
     for (const pr of Object.values(repoData)) {
       if (!pr) continue // deleted, or not visible to this account
 
+      /**
+       * Threads that represent somebody else's feedback.
+       *
+       * Bots are excluded for the reason on `PrRef.advisories`, and the author for
+       * the same reason again one step further: a thread you opened on your own PR
+       * is a note to yourself, not something waiting on you. Counting them put PRs
+       * nobody had read onto APPROACH and inflated "N unresolved" with your own
+       * remarks.
+       */
       const threads = pr.reviewThreads.nodes
-      const humanThreads = threads.filter((t) => !isBot(t.comments.nodes[0]?.author))
-      const unresolved = humanThreads.filter((t) => !t.isResolved)
+      const others = threads.filter((t) => {
+        const author = t.comments.nodes[0]?.author
+        return !isBot(author) && loginOf(author) !== pr.author?.login
+      })
+      const unresolved = others
+        .filter((t) => !t.isResolved)
+        .map((t) => ({ isOutdated: t.isOutdated, login: loginOf(t.comments.nodes[0]?.author) }))
+      const reviewers = reviewersOf(pr)
 
       updates.push({
         repository,
@@ -167,11 +239,12 @@ export async function refresh(): Promise<string[]> {
         // Human threads only — see the note on PrRef.advisories.
         advisories: unresolved.length,
         outdatedAdvisories: unresolved.filter((t) => t.isOutdated).length,
+        advisors: advisorsOf(unresolved),
+        reviewers,
         terminal: pr.state !== 'OPEN',
         // Either signal counts: a posted review, or a thread someone opened.
         // #2453 had 25 open human threads while still reading REVIEW_REQUIRED.
-        humanReviewed:
-          pr.reviews.nodes.some((r) => !isBot(r.author)) || humanThreads.length > 0,
+        humanReviewed: reviewers.length > 0 || others.length > 0,
         mergedAt: pr.mergedAt,
         fetchedAt: now,
       })

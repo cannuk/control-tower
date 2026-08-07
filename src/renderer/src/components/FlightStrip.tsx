@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { GitBranch, MapPin, TriangleAlert } from 'lucide-react'
+import { describeApproach } from '../../../shared/describe.js'
 import { headlinePr, squawk, type Board, type PrRef, type Session } from '../../../shared/types.js'
 import { TRANSPONDER } from '../lib/status.js'
 import { absoluteTime, elapsed } from '../lib/time.js'
@@ -49,6 +50,21 @@ export function FlightStrip({
   // A PR with no fetched title yet still leads, falling back to its number —
   // deferring to the session name would make the row jump when the title lands.
   const headline = lead ? (lead.title ?? `#${lead.number}`) : sessionName
+
+  /**
+   * The state line, from whichever source the board has.
+   *
+   * APPROACH is composed from review data and EN ROUTE from a generated summary.
+   * APPROACH takes the deterministic one even if a summary happens to exist: the
+   * row is there because a PR needs attention, and exactly who is waiting on what
+   * beats a paraphrase of the conversation that produced it.
+   */
+  const state =
+    board === 'approach'
+      ? describeApproach(session)
+      : board === 'en-route'
+        ? session.sessionState
+        : null
 
   /**
    * Resolve the terminal at click time rather than trusting `session.location`.
@@ -122,15 +138,12 @@ export function FlightStrip({
           />
         )}
 
-        {/* Where the work actually stands, on the board where that is the
-            question. Deliberately allowed to wrap onto two lines rather than
-            truncate — a state summary cut off mid-clause tells you less than no
-            state at all, and EN ROUTE is short enough to afford the height. */}
-        {board === 'en-route' && session.sessionState && (
-          <p className="text-text-muted mt-2.5 text-[12px] leading-relaxed">
-            {session.sessionState}
-          </p>
-        )}
+        {/* Where the work actually stands. Both boards answer that question, but
+            from different material: EN ROUTE from a summary of the transcript,
+            APPROACH from the PR's own review data, composed rather than generated
+            (see shared/describe.ts). Deliberately allowed to wrap onto two lines
+            rather than truncate — cut off mid-clause tells you less than nothing. */}
+        {state && <p className="text-text-muted mt-2.5 text-[12px] leading-relaxed">{state}</p>}
 
         <div className="text-text-subtle mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]">
           <span className="inline-flex items-center gap-1.5" title="Origin">

@@ -53,6 +53,27 @@ export type PrStatus =
   | 'inbound' /* awaiting review */
   | 'no-contact' /* fetch failed */
 
+/** One person's share of a PR's unresolved review threads. */
+export interface Advisor {
+  login: string
+  /** Unresolved threads this person opened. */
+  threads: number
+  /** How many of those sit on outdated code — usually nits already dealt with. */
+  outdated: number
+}
+
+/**
+ * A human's current position on a PR.
+ *
+ * Current, not historical: someone who requested changes and later approved
+ * appears once, as approved. GitHub returns every review ever posted, so the last
+ * decisive one per person is the only one that describes where the PR stands.
+ */
+export interface Reviewer {
+  login: string
+  stance: 'approved' | 'changes-requested' | 'commented'
+}
+
 export interface PrRef {
   number: number
   url: string
@@ -61,22 +82,37 @@ export interface PrRef {
   title: string | null
   status: PrStatus
   /**
-   * Unresolved review threads started by a **human**.
+   * Unresolved review threads started by **somebody else**.
    *
-   * Bot threads are excluded deliberately. CodeRabbit opens threads on most PRs,
-   * and counting them made "3 unresolved" appear on a PR no person had read —
-   * which is worse than no number, because it implies someone is waiting on you.
+   * Two exclusions, same reasoning both times: this number exists to say what other
+   * people are waiting on you for, so anything that is not that would inflate it.
+   * Bots go first — CodeRabbit opens threads on most PRs, and counting them made "3
+   * unresolved" appear on a PR no person had read. The PR's own author goes too: a
+   * thread you opened on your own work is a note to yourself.
    */
   advisories: number
   /** Advisories that are also outdated: usually stale nits. Tooltip only. */
   outdatedAdvisories: number
   /**
-   * A human has reviewed or commented on this PR.
+   * Who the unresolved threads belong to, most threads first.
    *
-   * The board's central distinction. `reviewDecision` alone cannot answer it:
-   * #2453 sat at REVIEW_REQUIRED with 25 open threads from three people, while
-   * #2545 had a full review posted by CodeRabbit and no human involvement at all.
-   * Any non-Bot review or thread counts.
+   * The counts here sum to `advisories`. Kept as a breakdown rather than a total
+   * because on APPROACH the useful question is not "how many" but "whose" — six
+   * threads from one reviewer is one conversation to work through, and three each
+   * from two people is two.
+   */
+  advisors: Advisor[]
+  /** Humans who have posted a review, and where they landed. Bots excluded. */
+  reviewers: Reviewer[]
+  /**
+   * Somebody other than you has reviewed or commented on this PR.
+   *
+   * The board's central distinction, and what admits a session to APPROACH.
+   * `reviewDecision` alone cannot answer it: #2453 sat at REVIEW_REQUIRED with 25
+   * open threads from three people, while #2545 had a full review posted by
+   * CodeRabbit and no human involvement at all. Any review or thread counts, from
+   * anyone who is neither a bot nor the author — #2471 was on APPROACH purely
+   * because its author had commented on their own work.
    */
   humanReviewed: boolean
   /** ISO timestamp, or null while unmerged. Orders the LANDED board. */
@@ -225,5 +261,4 @@ export function isOpen(pr: PrRef): boolean {
  * needs a different response from them, so each needs its own sentence.
  */
 export type TuneResult =
-  | { ok: true; ref: string; resumed?: boolean }
-  | { ok: false; reason: string }
+  { ok: true; ref: string; resumed?: boolean } | { ok: false; reason: string }

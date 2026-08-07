@@ -375,7 +375,27 @@ Later (not in v1): tray/menubar popover, command palette, per-workspace grouping
 
 ## 8. Summaries — how Control Tower gets one without a provider
 
-Claude Code stores no semantic summary (§2.3). cmux's titles come from its own
+Two boards carry a state line, and they get it from opposite directions. The distinction is
+worth stating first, because the reflex is to reach for a model on both:
+
+- **APPROACH is composed, not generated.** Everything that decides whether the row needs you is
+  already structured — the review decision, who posted it, how many threads are unresolved and
+  whose they are. A model asked to restate that would be slower, spend usage, and be capable of
+  being wrong about a number we already hold exactly. So `shared/describe.ts` assembles four
+  clauses from the GraphQL response and nothing else: stance, CI when it contradicts the stance,
+  threads broken down by author, and outdated threads. Same state always produces the same
+  sentence.
+- **EN ROUTE needs a model,** because "what is this session doing" exists only as prose inside a
+  transcript. That is what the rest of this section is about.
+
+Getting the APPROACH sentence right also fixed a board rule. Writing "who is waiting" forced the
+query to select author logins, which made it obvious that **you are not a reviewer of your own
+PR** — GitHub does not allow it, so every "review" of yours is a comment. #2471 was sitting on
+APPROACH purely because its author had commented on their own work. Your own review threads are
+excluded from `advisories` for the same reason: the number exists to say what other people are
+waiting on you for. It is the CodeRabbit rule (§7) one step further.
+
+For EN ROUTE: Claude Code stores no semantic summary (§2.3). cmux's titles come from its own
 `hooks claude auto-name` LLM call, so relying on them means the summary column goes blank the
 moment you switch terminals. **Control Tower generates its own.** Same layered shape as focus —
 best available wins:
