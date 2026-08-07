@@ -7,11 +7,16 @@ import { TitleBar } from './components/TitleBar.js'
 import { splitByBoard, useStore } from './store.js'
 
 export function App(): React.JSX.Element {
-  const { init, snapshot, board, error, bumpTick, legendOpen, toggleLegend } = useStore()
+  const { init, snapshot, board, error, bumpTick, legendOpen, toggleLegend, subscribe } =
+    useStore()
 
   useEffect(() => {
     void init()
   }, [init])
+
+  // Live updates. The unsubscribe matters under StrictMode, which mounts twice —
+  // without it every pushed sweep would be handled twice over.
+  useEffect(() => subscribe(), [subscribe])
 
   // Elapsed-time fields go stale silently otherwise — nothing else re-renders
   // them, so every strip would show the age it had at load, forever.

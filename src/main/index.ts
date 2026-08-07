@@ -2,8 +2,10 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import Store from 'electron-store'
 import { THEMES, type SessionSnapshot, type ThemeName, type TuneResult } from '../shared/types.js'
-import { PLACEHOLDER_SNAPSHOT } from './placeholder.js'
 import * as cmux from './providers/cmux.js'
+import { collect } from './collectors/snapshot.js'
+import * as cacheStore from './store/cache.js'
+import * as watcher from './watcher.js'
 
 interface Bounds {
   x?: number
@@ -125,15 +127,9 @@ ipcMain.handle('prefs:setTheme', (_e, theme: ThemeName) => {
   win?.setBackgroundColor(firstPaint(theme))
 })
 
-/**
- * M1 serves a fixed snapshot so the UI can be built and judged at real density
- * before the collectors exist. M2 replaces this with the live registry +
- * transcript readers and pushes on a watcher tick instead of on request.
- */
-ipcMain.handle('sessions:snapshot', (): SessionSnapshot => ({
-  ...PLACEHOLDER_SNAPSHOT,
-  sweptAt: Date.now(),
-}))
+// Pull, for the initial paint and the manual sweep button. Live updates arrive
+// by push from the watcher instead — see watcher.start below.
+ipcMain.handle('sessions:snapshot', (): Promise<SessionSnapshot> => collect())
 
 /**
  * Tune to a session — bring its terminal to the front.
@@ -164,6 +160,7 @@ ipcMain.handle('window:minimize', () => win?.minimize())
 
 void app.whenReady().then(() => {
   createWindow()
+  watcher.start((snapshot) => watcher.pushTo(win, snapshot))
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -171,4 +168,11 @@ void app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// Release the file watcher and the sqlite handle rather than relying on process
+// teardown — a WAL left open can leave -wal/-shm files behind.
+app.on('before-quit', () => {
+  watcher.stop()
+  cacheStore.close()
 })

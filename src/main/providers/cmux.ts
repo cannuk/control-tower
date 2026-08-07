@@ -131,6 +131,44 @@ function persistedWorkspaces(): Map<string, string> {
   return bySession
 }
 
+/**
+ * Session id -> panel title, from cmux's persisted layout.
+ *
+ * These titles are cmux's own `hooks claude auto-name` output — an LLM-generated
+ * summary of what the session is doing. Reading them is the layer-1 fast path for
+ * §8: free, already computed, and available for every panel cmux has persisted
+ * (20 on a real machine) rather than only the materialized ones (4).
+ *
+ * The leading glyph is a live status/spinner frame cmux prepends, not part of the
+ * title, so it is stripped.
+ */
+export function titles(): Map<string, string> {
+  const bySession = new Map<string, string>()
+  try {
+    const store = JSON.parse(readFileSync(STORE_PATH, 'utf8')) as {
+      windows?: {
+        tabManager?: {
+          workspaces?: {
+            panels?: { title?: string; terminal?: { agent?: { sessionId?: string } } }[]
+          }[]
+        }
+      }[]
+    }
+    for (const window of store.windows ?? []) {
+      for (const workspace of window.tabManager?.workspaces ?? []) {
+        for (const panel of workspace.panels ?? []) {
+          const sessionId = panel.terminal?.agent?.sessionId
+          const title = panel.title?.replace(/^[^\p{L}\p{N}]+/u, '').trim()
+          if (sessionId && title) bySession.set(sessionId, title)
+        }
+      }
+    }
+  } catch {
+    /* no titles available; callers fall back */
+  }
+  return bySession
+}
+
 /** Select the tab, then raise cmux above other apps. Both are needed. */
 async function focusSurface(surface: Surface): Promise<TuneResult> {
   try {

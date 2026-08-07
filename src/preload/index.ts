@@ -12,6 +12,17 @@ const api = {
   getSnapshot: (): Promise<SessionSnapshot> => ipcRenderer.invoke('sessions:snapshot'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
   tune: (sessionId: string): Promise<TuneResult> => ipcRenderer.invoke('session:tune', sessionId),
+
+  /**
+   * Subscribe to pushed sweeps. Returns an unsubscribe function — without one,
+   * a re-mounting renderer stacks listeners on the same channel and every
+   * snapshot gets handled N times.
+   */
+  onSnapshot: (handler: (snapshot: SessionSnapshot) => void): (() => void) => {
+    const wrapped = (_e: unknown, snapshot: SessionSnapshot): void => handler(snapshot)
+    ipcRenderer.on('sessions:pushed', wrapped)
+    return () => ipcRenderer.off('sessions:pushed', wrapped)
+  },
   closeWindow: (): Promise<void> => ipcRenderer.invoke('window:close'),
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
 }

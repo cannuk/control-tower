@@ -23,6 +23,7 @@ interface State {
   refresh: () => Promise<void>
   bumpTick: () => void
   toggleLegend: () => void
+  subscribe: () => () => void
 }
 
 /**
@@ -74,6 +75,14 @@ export const useStore = create<State>((set, get) => ({
   bumpTick: () => set((s) => ({ tick: s.tick + 1 })),
 
   toggleLegend: () => set((s) => ({ legendOpen: !s.legendOpen })),
+
+  /**
+   * Take pushed sweeps from the watcher. The initial paint still uses a pull so
+   * the board is populated before the first file event, which on a quiet machine
+   * could otherwise be minutes away.
+   */
+  subscribe: () =>
+    window.controlTower.onSnapshot((snapshot) => set({ snapshot, loading: false, error: null })),
 }))
 
 /**
