@@ -1,4 +1,4 @@
-import { ADVISORY_ICON, PR_STATUS, TRANSPONDER } from '../lib/status.js'
+import { ADVISORY_ICON, DOT_KEY, PR_STATUS } from '../lib/status.js'
 import { Overlay, Row, Section } from './Overlay.js'
 import type { PrStatus } from '../../../shared/types.js'
 import { cn } from '../lib/utils.js'
@@ -13,8 +13,8 @@ import { cn } from '../lib/utils.js'
  * place that decodes all of it. Without a key, every flourish is a private joke
  * that costs the reader something.
  *
- * It also keeps itself honest: the status rows are generated from PR_STATUS and
- * TRANSPONDER rather than retyped, so a label that changes in the app cannot go
+ * It also keeps itself honest: the status and dot rows are generated from PR_STATUS
+ * and DOT_KEY rather than retyped, so a label that changes in the app cannot go
  * stale here.
  */
 
@@ -68,7 +68,7 @@ const MARKINGS: [string, string][] = [
   ],
   ['Tune', 'Click a description to bring that session’s terminal to the front'],
   ['Cocked strip', 'Nudged right with a marked edge — the session has output you have not seen'],
-  ['Offset dot', 'Filled and pulsing = working now. Hollow = idle. Dim = no heartbeat'],
+  ['Offset dot', 'See THE DOT below — one mark carrying both new activity and liveness'],
 ]
 
 export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -134,17 +134,18 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
         ))}
       </Section>
 
-      <Section title="TRANSPONDER">
-        {(Object.keys(TRANSPONDER) as (keyof typeof TRANSPONDER)[]).map((key) => (
+      <Section title="THE DOT">
+        {DOT_KEY.map((entry) => (
           <Row
-            key={key}
+            key={entry.label}
             left={
-              <span className="inline-flex items-center gap-2">
-                <span className={cn('size-2 rounded-full', TRANSPONDER[key].dot)} />
-                <span className="field text-[11px]">{key}</span>
+              <span className="flex w-full justify-center">
+                <span
+                  className={cn('size-2.5 rounded-full', entry.dot, entry.pulse && 'animate-sweep')}
+                />
               </span>
             }
-            right={TRANSPONDER[key].label}
+            right={entry.label}
           />
         ))}
       </Section>

@@ -7,6 +7,7 @@ import { Preferences } from './components/Preferences.js'
 import { Tabs } from './components/Tabs.js'
 import { TitleBar } from './components/TitleBar.js'
 import { splitByBoard } from '../../shared/boards.js'
+
 import { useStore } from './store.js'
 
 export function App(): React.JSX.Element {
@@ -74,10 +75,19 @@ export function App(): React.JSX.Element {
 
       <TitleBar />
       <Tabs
-        departuresCount={departures.length}
-        enRouteCount={enRoute.length}
-        approachCount={approach.length}
-        landedCount={landed.length}
+        counts={{
+          departures: departures.length,
+          'en-route': enRoute.length,
+          approach: approach.length,
+          landed: landed.length,
+        }}
+        unread={{
+          // A filed plan has no session and so no activity to have missed.
+          departures: false,
+          'en-route': enRoute.some((s) => s.unread),
+          approach: approach.some((s) => s.unread),
+          landed: landed.some((s) => s.unread),
+        }}
       />
 
       <main className="min-h-0 flex-1 overflow-y-auto">

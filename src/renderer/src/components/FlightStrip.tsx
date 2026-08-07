@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { GitBranch, MapPin, TriangleAlert } from 'lucide-react'
 import { describeApproach } from '../../../shared/describe.js'
 import { headlinePr, squawk, type Board, type PrRef, type Session } from '../../../shared/types.js'
-import { TRANSPONDER } from '../lib/status.js'
+import { dotFor } from '../lib/status.js'
 import { absoluteTime, elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
 import { StatusChip } from './StatusChip.js'
@@ -35,7 +35,7 @@ export function FlightStrip({
   session: Session
   board: Board
 }): React.JSX.Element {
-  const transponder = TRANSPONDER[session.transponder]
+  const dot = dotFor(session.transponder, session.unread)
   const [tuneError, setTuneError] = useState<string | null>(null)
 
   const lead = headlinePr(session, board)
@@ -77,7 +77,14 @@ export function FlightStrip({
   async function tune(): Promise<void> {
     setTuneError(null)
     const result = await window.controlTower.tune(session.sessionId, session.cwd)
-    if (!result.ok) setTuneError(result.reason)
+    if (!result.ok) {
+      setTuneError(result.reason)
+      return
+    }
+    // Opening the terminal is what "viewing" means here — there is no detail view to
+    // read inside Control Tower. Only on success: a tune that failed showed you
+    // nothing, so dismissing the activity would lose it.
+    await window.controlTower.markRead(session.sessionId, session.lastContact)
   }
 
   return (
@@ -91,13 +98,13 @@ export function FlightStrip({
           face, so this column is the same width on every strip. */}
       <div className="flex w-[4rem] shrink-0 items-center gap-2.5 pt-0.5">
         <span
-          title={transponder.label}
-          aria-label={transponder.label}
+          title={dot.label}
+          aria-label={dot.label}
           className={cn(
             'size-2.5 shrink-0 rounded-full',
-            transponder.dot,
-            // Only an airborne flight pulses. An idle one drawing the eye is noise.
-            session.transponder === 'airborne' && 'animate-sweep',
+            dot.dot,
+            // Only a generating session pulses. Anything else drawing the eye is noise.
+            dot.pulse && 'animate-sweep',
           )}
         />
         <span

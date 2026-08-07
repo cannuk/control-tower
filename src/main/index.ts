@@ -330,6 +330,18 @@ ipcMain.handle('dialog:chooseDirectory', async (): Promise<string | null> => {
   return canceled ? null : (filePaths[0] ?? null)
 })
 
+/**
+ * Mark a session seen up to a moment.
+ *
+ * The timestamp comes from the renderer's snapshot rather than `Date.now()`, so a
+ * click marks read exactly what was on screen. Using the server clock would also
+ * dismiss anything written between the sweep you were looking at and the click.
+ */
+ipcMain.handle('session:markRead', (_e, sessionId: string, at: number) => {
+  if (typeof sessionId !== 'string' || !Number.isFinite(at)) return
+  cacheStore.markRead(sessionId, at)
+})
+
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   // Only ever hand http(s) to the OS — a file:// or custom scheme from the
   // renderer would be a way to launch arbitrary local handlers.

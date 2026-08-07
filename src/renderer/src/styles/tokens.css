@@ -78,7 +78,10 @@
 
   /* Transponder — the liveness dot */
   --ct-squawk-live: oklch(82% 0.19 145);
-  --ct-squawk-holding: oklch(56% 0.018 200);
+  /* Finished and waiting on you. Cyan, matching the "awaiting clearance" reading
+   * --ct-inbound already carries, and filled rather than hollow: this is a state
+   * that wants you, and an outline reads as absence. */
+  --ct-squawk-holding: oklch(74% 0.14 232);
   --ct-squawk-lost: oklch(38% 0.014 200);
 
   /* Approved with threads open. Green family, dimmed — see the note on the
@@ -128,7 +131,8 @@
   --ct-dormant-fg: oklch(99% 0.002 210);
 
   --ct-squawk-live: oklch(48% 0.15 148);
-  --ct-squawk-holding: oklch(72% 0.014 210);
+  /* Darker on a light ground, or a bright dot vanishes into the surface. */
+  --ct-squawk-holding: oklch(52% 0.16 244);
   --ct-squawk-lost: oklch(84% 0.008 210);
 
   /* Light polarity, so the muting inverts: a pale green wash under dark green
@@ -181,7 +185,9 @@
   --ct-dormant-fg: oklch(90% 0.09 78);
 
   --ct-squawk-live: oklch(88% 0.14 85);
-  --ct-squawk-holding: oklch(52% 0.06 60);
+  /* Near-monochrome, so hue cannot separate these three at all — luminance does.
+   * Working is brightest, waiting sits between, no-contact is nearly out. */
+  --ct-squawk-holding: oklch(66% 0.11 68);
   --ct-squawk-lost: oklch(34% 0.035 58);
 
   /* Near-monochrome, so hue cannot carry the distinction here at all — fill

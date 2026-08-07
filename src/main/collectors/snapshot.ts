@@ -125,6 +125,7 @@ export async function collect(): Promise<SessionSnapshot> {
     warnings.push(`PR link scan failed: ${cause instanceof Error ? cause.message : cause}`)
   }
 
+  const readMarks = cache.readMarks()
   const prLinks = cache.prLinksBySession()
   const prStatuses = cache.prStatuses()
   const providerTitles = cmux.titles()
@@ -177,9 +178,24 @@ export async function collect(): Promise<SessionSnapshot> {
       // Resolved at click time by the provider (see cmux.focus), so this only
       // records whether tuning is plausible at all.
       location: entry ? { providerId: 'cmux', handle: sessionId, exact: true } : null,
-      unread: false,
+      /**
+       * New activity since you last opened it.
+       *
+       * A session with no mark yet is *read*, not unread — it is seeded below at
+       * whatever activity it already had. Treating unknown as unread would flag every
+       * session on the first sweep after this shipped, and an inbox that starts full
+       * teaches you to ignore it.
+       */
+      unread: info.mtimeMs > (readMarks.get(sessionId) ?? info.mtimeMs),
     })
   }
+
+  // Anything we have never seen before starts read, from this moment on.
+  cache.seedRead(
+    sessions
+      .filter((s) => !readMarks.has(s.sessionId))
+      .map((s) => ({ sessionId: s.sessionId, lastContact: s.lastContact })),
+  )
 
   await refreshDirty(cwds)
   for (const session of sessions) {

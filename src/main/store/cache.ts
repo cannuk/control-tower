@@ -469,3 +469,71 @@ export function putGeneratedTitles(titles: GeneratedTitle[]): void {
     throw cause
   }
 }
+
+/**
+ * When each session was last looked at.
+ *
+ * Not derivable from anything — it records what *you* have seen, so it belongs here
+ * with the scan offsets rather than in a rebuildable cache. The pr_status schema bump
+ * drops only that table by name; this one is never versioned into a rebuild.
+ */
+function ensureReadTable(): void {
+  open().exec(`
+    CREATE TABLE IF NOT EXISTS session_read (
+      session_id  TEXT PRIMARY KEY,
+      read_at     INTEGER NOT NULL
+    );
+  `)
+}
+
+/** session id -> the last-contact time it had when you last viewed it. */
+export function readMarks(): Map<string, number> {
+  ensureReadTable()
+  const rows = open().prepare('SELECT session_id, read_at FROM session_read').all() as {
+    session_id: string
+    read_at: number
+  }[]
+  return new Map(rows.map((r) => [r.session_id, r.read_at]))
+}
+
+/**
+ * Record a session as seen up to `at`.
+ *
+ * Monotonic: a mark never moves backwards. Two sweeps can race — a stale snapshot in
+ * the renderer could ask to mark a session read at an earlier point than one already
+ * recorded, which would resurrect activity you had already dismissed.
+ */
+export function markRead(sessionId: string, at: number): void {
+  ensureReadTable()
+  open()
+    .prepare(
+      `INSERT INTO session_read (session_id, read_at) VALUES (?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET read_at = MAX(read_at, excluded.read_at)`,
+    )
+    .run(sessionId, at)
+}
+
+/**
+ * Give sessions we have never seen before a mark at their current activity.
+ *
+ * Without this, the first sweep after this feature ships would flag all hundred-odd
+ * sessions as unread and light every tab — an inbox that starts full teaches you to
+ * ignore it. A session is only unread once it moves *after* Control Tower first
+ * noticed it.
+ */
+export function seedRead(entries: { sessionId: string; lastContact: number }[]): void {
+  if (entries.length === 0) return
+  ensureReadTable()
+  const database = open()
+  const insert = database.prepare(
+    'INSERT INTO session_read (session_id, read_at) VALUES (?, ?) ON CONFLICT DO NOTHING',
+  )
+  database.exec('BEGIN')
+  try {
+    for (const e of entries) insert.run(e.sessionId, e.lastContact)
+    database.exec('COMMIT')
+  } catch (cause) {
+    database.exec('ROLLBACK')
+    throw cause
+  }
+}

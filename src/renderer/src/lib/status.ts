@@ -132,14 +132,44 @@ export const PR_STATUS: Record<PrStatus, StatusPresentation> = {
 }
 
 /**
- * The liveness dot has no label, only a tooltip — so it can carry both readings
- * at once and costs nothing to skip.
+ * What the dot on a strip means.
+ *
+ * One indicator carrying two facts, ordered so the loud state is the actionable one.
+ * An earlier version made it liveness alone — green working, cyan alive, dim gone —
+ * which was useless on the board you look at most: EN ROUTE *requires* a live
+ * process, so `no-contact` is structurally impossible there and every row sat cyan
+ * forever. A signal that cannot vary on a board is not a signal on that board.
+ *
+ * So unread takes the solid fill, and liveness became the modifier:
+ *
+ *   - generating   green, pulsing. It is working; there is nothing for you to do,
+ *                  and this is more specific than "new" so it wins the slot.
+ *   - unread       solid cyan. Moved since you last opened it. Clicking clears it.
+ *   - read, alive  hollow. Running, nothing new — the quiet resting state, and quiet
+ *                  is the point.
+ *   - read, gone   dim fill. No process; clicking resumes from the transcript rather
+ *                  than jumping to a tab. This is the distinction the dot still earns
+ *                  its keep on for APPROACH and LANDED.
  */
-export const TRANSPONDER: Record<Transponder, { dot: string; label: string }> = {
-  airborne: { dot: 'bg-squawk-live', label: 'Working now — airborne' },
-  holding: { dot: 'bg-transparent ring-1 ring-squawk-holding', label: 'Idle — holding' },
-  'no-contact': { dot: 'bg-squawk-lost', label: 'No heartbeat — no contact' },
+export const DOT_KEY: { dot: string; pulse?: boolean; label: string }[] = [
+  { dot: 'bg-squawk-live', pulse: true, label: 'Generating a reply right now' },
+  { dot: 'bg-squawk-holding', label: 'New activity since you last opened it' },
+  { dot: 'bg-transparent ring-1 ring-squawk-lost', label: 'Running, nothing new' },
+  { dot: 'bg-squawk-lost', label: 'No process — opening it resumes the session' },
+]
+
+export function dotFor(
+  transponder: Transponder,
+  unread: boolean,
+): { dot: string; pulse: boolean; label: string } {
+  if (transponder === 'airborne') return { ...DOT_KEY[0]!, pulse: true }
+  if (unread) return { ...DOT_KEY[1]!, pulse: false }
+  if (transponder === 'no-contact') return { ...DOT_KEY[3]!, pulse: false }
+  return { ...DOT_KEY[2]!, pulse: false }
 }
+
+/** The fill an unread marker uses, wherever it appears. */
+export const UNREAD_DOT = 'bg-squawk-holding'
 
 /** The icon that marks the thread count inside a status chip. */
 export const ADVISORY_ICON = MessageSquare
