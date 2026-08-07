@@ -149,16 +149,31 @@ export const PR_STATUS: Record<PrStatus, StatusPresentation> = {
  * Generating stays a distinct state rather than folding into unread because it is
  * the same fact one step fresher — output is landing as you look at it.
  */
-export const DOT_KEY: { dot: string; pulse?: boolean; label: string }[] = [
-  { dot: 'bg-squawk-live', pulse: true, label: 'Generating right now — new output still arriving' },
-  { dot: 'bg-squawk-holding', label: 'New activity since you last opened it' },
-  { dot: 'bg-transparent ring-1 ring-squawk-lost', label: 'Nothing new since you last opened it' },
+export type DotKind = 'generating' | 'unread' | 'quiet'
+
+export const DOT_KEY: { kind: DotKind; dot: string; pulse?: boolean; label: string }[] = [
+  {
+    kind: 'generating',
+    dot: 'bg-squawk-live',
+    pulse: true,
+    label: 'Generating right now — new output still arriving',
+  },
+  {
+    kind: 'unread',
+    dot: 'bg-squawk-holding',
+    label: 'New activity since you last opened it — click to clear',
+  },
+  {
+    kind: 'quiet',
+    dot: 'bg-transparent ring-1 ring-squawk-lost',
+    label: 'Nothing new since you last opened it',
+  },
 ]
 
 export function dotFor(
   transponder: Transponder,
   unread: boolean,
-): { dot: string; pulse: boolean; label: string } {
+): { kind: DotKind; dot: string; pulse: boolean; label: string } {
   if (transponder === 'airborne') return { ...DOT_KEY[0]!, pulse: true }
   if (unread) return { ...DOT_KEY[1]!, pulse: false }
   return { ...DOT_KEY[2]!, pulse: false }

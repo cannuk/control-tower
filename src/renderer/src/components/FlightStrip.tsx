@@ -38,7 +38,7 @@ export function FlightStrip({
   board: Board
 }): React.JSX.Element {
   const dot = dotFor(session.transponder, session.unread)
-  const { setHeld } = useStore()
+  const { setHeld, markRead } = useStore()
   const [tuneError, setTuneError] = useState<string | null>(null)
 
   const lead = headlinePr(session, board)
@@ -98,16 +98,37 @@ export function FlightStrip({
       {/* Fixed gutter — the squawk is always four characters in a monospaced
           face, so this column is the same width on every strip. */}
       <div className="flex w-[4rem] shrink-0 items-center gap-2.5 pt-0.5">
-        <span
-          title={dot.label}
-          aria-label={dot.label}
-          className={cn(
-            'size-2.5 shrink-0 rounded-full',
-            dot.dot,
-            // Only a generating session pulses. Anything else drawing the eye is noise.
-            dot.pulse && 'animate-sweep',
-          )}
-        />
+        {/*
+          Interactive only while it is showing unread, which is the only state where
+          clicking changes anything you can see. A generating session is unread too,
+          but its dot stays green either way — a button that visibly does nothing
+          reads as broken, so it is a plain mark until the session settles.
+
+          The hit area is padded well beyond the 10px dot: a 10px target is a miss
+          waiting to happen, and this one sits next to the tune action.
+        */}
+        {dot.kind === 'unread' ? (
+          <button
+            type="button"
+            onClick={() => void markRead(session.sessionId, session.lastContact)}
+            title={dot.label}
+            aria-label="Clear new activity on this session"
+            className="no-drag -m-1.5 shrink-0 cursor-pointer p-1.5"
+          >
+            <span className={cn('block size-2.5 rounded-full', dot.dot)} />
+          </button>
+        ) : (
+          <span
+            title={dot.label}
+            aria-label={dot.label}
+            className={cn(
+              'size-2.5 shrink-0 rounded-full',
+              dot.dot,
+              // Only a generating session pulses. Anything else drawing the eye is noise.
+              dot.pulse && 'animate-sweep',
+            )}
+          />
+        )}
         <span
           title="Squawk — short handle for this session"
           className="field text-text-subtle text-[11px]"

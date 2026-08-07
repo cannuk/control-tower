@@ -55,6 +55,7 @@ interface State {
   removeDeparture: (id: number) => Promise<void>
   moveDeparture: (id: number, index: number) => Promise<void>
   setHeld: (sessionId: string, held: boolean) => Promise<void>
+  markRead: (sessionId: string, at: number) => Promise<void>
   launchDeparture: (id: number) => Promise<string | null>
   bumpTick: () => void
   /** Open a panel, or pass the open one to close it. */
@@ -210,6 +211,28 @@ export const useStore = create<State>((set, get) => ({
     }
     await window.controlTower.setHeld(sessionId, held)
     await get().refresh(false)
+  },
+
+  /**
+   * Dismiss a session's new activity without opening it.
+   *
+   * Tuning already marks read, but that is the wrong tool for a row you have decided
+   * you do not need to look at — it would open a terminal to dismiss a dot. Applied
+   * locally first so the dot changes on the click rather than on the next sweep.
+   */
+  markRead: async (sessionId, at) => {
+    const snapshot = get().snapshot
+    if (snapshot) {
+      set({
+        snapshot: {
+          ...snapshot,
+          sessions: snapshot.sessions.map((s) =>
+            s.sessionId === sessionId ? { ...s, unread: false } : s,
+          ),
+        },
+      })
+    }
+    await window.controlTower.markRead(sessionId, at)
   },
 
   bumpTick: () => set((s) => ({ tick: s.tick + 1 })),
