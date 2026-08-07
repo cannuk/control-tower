@@ -293,6 +293,11 @@ export interface Departure {
    */
   cwd: string | null
   createdAt: number
+  /**
+   * Manual queue position. Null for rows filed before ordering existed, which sort
+   * by `createdAt` instead — see the ORDER BY in store/staging.ts.
+   */
+  position: number | null
 }
 
 /** What a launch attempt reports back. */

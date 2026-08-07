@@ -53,6 +53,7 @@ interface State {
     fields: { title?: string; notes?: string | null; cwd?: string | null },
   ) => Promise<void>
   removeDeparture: (id: number) => Promise<void>
+  moveDeparture: (id: number, index: number) => Promise<void>
   launchDeparture: (id: number) => Promise<string | null>
   bumpTick: () => void
   /** Open a panel, or pass the open one to close it. */
@@ -125,6 +126,27 @@ export const useStore = create<State>((set, get) => ({
 
   removeDeparture: async (id) => {
     await window.controlTower.removeDeparture(id)
+    await get().loadDepartures()
+  },
+
+  /**
+   * Reorder, applying the move locally before the round trip.
+   *
+   * The one place in this store that patches its own state instead of reloading. A
+   * drop that visibly springs back for a frame while SQLite answers reads as a failed
+   * drag, and the main process computes the same order from the same list — so the
+   * reload that follows confirms rather than corrects.
+   */
+  moveDeparture: async (id, index) => {
+    const current = get().departures
+    const from = current.findIndex((d) => d.id === id)
+    if (from !== -1) {
+      const next = [...current]
+      const [moved] = next.splice(from, 1)
+      if (moved) next.splice(index, 0, moved)
+      set({ departures: next })
+    }
+    await window.controlTower.moveDeparture(id, index)
     await get().loadDepartures()
   },
 

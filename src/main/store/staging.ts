@@ -16,7 +16,8 @@ import { open } from './cache.js'
  */
 
 function ensure(): void {
-  open().exec(`
+  const db = open()
+  db.exec(`
     CREATE TABLE IF NOT EXISTS departure (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       title       TEXT NOT NULL,
@@ -25,6 +26,27 @@ function ensure(): void {
       created_at  INTEGER NOT NULL
     );
   `)
+
+  /**
+   * Manual queue order, added after the table shipped.
+   *
+   * ALTER rather than a rebuild, because these rows are not reconstructible — see the
+   * note at the top of this file. Backfilled from created_at so an existing queue
+   * keeps the order it already had rather than scrambling on upgrade.
+   *
+   * A float, not an integer. Moving a row between two others then costs one UPDATE
+   * on the row that moved, by taking the midpoint of its new neighbours; integer
+   * positions would mean renumbering everything below the insertion point on every
+   * drag. Doubles give ~50 consecutive midpoint splits before precision runs out,
+   * and `normalise` below resets the spacing long before that.
+   */
+  const columns = (db.prepare('PRAGMA table_info(departure)').all() as { name: string }[]).map(
+    (c) => c.name,
+  )
+  if (!columns.includes('position')) {
+    db.exec('ALTER TABLE departure ADD COLUMN position REAL')
+    db.exec('UPDATE departure SET position = created_at WHERE position IS NULL')
+  }
 }
 
 /**
@@ -42,6 +64,7 @@ type Row = {
   notes: string | null
   cwd: string | null
   created_at: number
+  position: number | null
 }
 
 const toDeparture = (r: Row): Departure => ({
@@ -50,35 +73,92 @@ const toDeparture = (r: Row): Departure => ({
   notes: r.notes,
   cwd: r.cwd,
   createdAt: r.created_at,
+  position: r.position,
 })
 
 /**
- * Oldest first, so the board reads as a queue.
+ * Queue order: manual position first, arrival time as the tiebreak.
  *
  * The opposite of every other board here, which are newest-first because recent
- * activity is the signal. A queue's signal is order of arrival: the thing at the top
- * is the thing you meant to do next.
+ * activity is the signal. A queue's signal is the order you put things in — the row
+ * at the top is the thing you meant to do next, whether it got there by being filed
+ * first or by being dragged there.
  */
 export function list(): Departure[] {
   ensure()
   const rows = open()
-    .prepare('SELECT id, title, notes, cwd, created_at FROM departure ORDER BY created_at, id')
+    .prepare(
+      `SELECT id, title, notes, cwd, created_at, position FROM departure
+       ORDER BY COALESCE(position, created_at), id`,
+    )
     .all() as Row[]
   return rows.map(toDeparture)
+}
+
+/**
+ * Move a row so it sits at `index` in the current queue.
+ *
+ * Position is computed as the midpoint between the neighbours it lands between, so
+ * exactly one row is written per move. The list is read fresh rather than trusting an
+ * index from the renderer against a stale copy — the renderer's view can be one
+ * launch behind, and reordering against the wrong neighbours would land the row in
+ * the wrong place silently.
+ */
+export function move(id: number, index: number): void {
+  ensure()
+  const queue = list().filter((d) => d.id !== id)
+  const target = Math.max(0, Math.min(index, queue.length))
+  const positionOf = (d: Departure | undefined): number | null =>
+    d ? (d.position ?? d.createdAt) : null
+
+  const before = positionOf(queue[target - 1])
+  const after = positionOf(queue[target])
+
+  let next: number
+  if (before === null && after === null) next = Date.now()
+  else if (before === null) next = (after as number) - 1000
+  else if (after === null) next = before + 1000
+  else next = (before + after) / 2
+
+  open().prepare('UPDATE departure SET position = ? WHERE id = ?').run(next, id)
+
+  // Midpoints halve the gap each time; respace once they get too tight to split
+  // again. Cheap, and it keeps the float from ever reaching its precision limit.
+  if (before !== null && after !== null && Math.abs(after - before) < 1e-6) normalise()
+}
+
+/** Rewrite positions as evenly spaced integers, preserving current order. */
+function normalise(): void {
+  const db = open()
+  const rows = list()
+  const update = db.prepare('UPDATE departure SET position = ? WHERE id = ?')
+  db.exec('BEGIN')
+  try {
+    rows.forEach((row, i) => update.run((i + 1) * 1000, row.id))
+    db.exec('COMMIT')
+  } catch (cause) {
+    db.exec('ROLLBACK')
+    throw cause
+  }
 }
 
 export function add(title: string, notes: string | null, cwd: string | null): Departure {
   ensure()
   const now = Date.now()
+  // New plans join the back of the queue, which is what `now` gives for free
+  // whether or not anything above has been dragged.
   const result = open()
-    .prepare('INSERT INTO departure (title, notes, cwd, created_at) VALUES (?, ?, ?, ?)')
-    .run(title, notes, cwd, now)
+    .prepare(
+      'INSERT INTO departure (title, notes, cwd, created_at, position) VALUES (?, ?, ?, ?, ?)',
+    )
+    .run(title, notes, cwd, now, now)
   return {
     id: Number(result.lastInsertRowid),
     title,
     notes,
     cwd,
     createdAt: now,
+    position: now,
   }
 }
 
@@ -119,7 +199,7 @@ export function remove(id: number): void {
 export function get(id: number): Departure | null {
   ensure()
   const row = open()
-    .prepare('SELECT id, title, notes, cwd, created_at FROM departure WHERE id = ?')
+    .prepare('SELECT id, title, notes, cwd, created_at, position FROM departure WHERE id = ?')
     .get(id) as Row | undefined
   return row ? toDeparture(row) : null
 }

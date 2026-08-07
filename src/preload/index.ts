@@ -42,6 +42,8 @@ const api = {
     fields: { title?: string; notes?: string | null; cwd?: string | null },
   ): Promise<void> => ipcRenderer.invoke('staging:update', id, fields),
   removeDeparture: (id: number): Promise<void> => ipcRenderer.invoke('staging:remove', id),
+  moveDeparture: (id: number, index: number): Promise<void> =>
+    ipcRenderer.invoke('staging:move', id, index),
   launchDeparture: (id: number): Promise<TuneResult> => ipcRenderer.invoke('staging:launch', id),
   chooseDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:chooseDirectory'),
 }

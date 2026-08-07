@@ -253,6 +253,11 @@ ipcMain.handle(
 
 ipcMain.handle('staging:remove', (_e, id: number) => staging.remove(id))
 
+ipcMain.handle('staging:move', (_e, id: number, index: number) => {
+  if (!Number.isInteger(index) || index < 0) return
+  staging.move(id, index)
+})
+
 /**
  * Turn a filed departure into a live session.
  *

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FolderOpen, PlaneTakeoff, Trash2, TriangleAlert } from 'lucide-react'
+import { FolderOpen, GripVertical, PlaneTakeoff, Trash2, TriangleAlert } from 'lucide-react'
 import type { Departure } from '../../../shared/types.js'
 import { elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
@@ -19,7 +19,17 @@ import { useStore } from '../store.js'
  * with its neighbours.
  */
 export function Departures(): React.JSX.Element {
-  const { departures } = useStore()
+  const { departures, moveDeparture } = useStore()
+  /** Index the dragged row would land at, for the insertion line. */
+  const [over, setOver] = useState<number | null>(null)
+  const [dragging, setDragging] = useState<number | null>(null)
+
+  function drop(index: number): void {
+    const id = dragging
+    setOver(null)
+    setDragging(null)
+    if (id !== null) void moveDeparture(id, index)
+  }
 
   return (
     <div>
@@ -37,10 +47,44 @@ export function Departures(): React.JSX.Element {
           </p>
         </div>
       ) : (
-        departures.map((item) => <PlanStrip key={item.id} item={item} />)
+        departures.map((item, index) => (
+          <div
+            key={item.id}
+            onDragOver={(e) => {
+              // Required, or the browser refuses the drop entirely. The midpoint test
+              // decides whether the row lands above or below the one under the cursor,
+              // which is what makes a drag feel like it is inserting rather than
+              // swapping.
+              e.preventDefault()
+              const box = e.currentTarget.getBoundingClientRect()
+              setOver(e.clientY < box.top + box.height / 2 ? index : index + 1)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              drop(over ?? index)
+            }}
+          >
+            {over === index && <InsertionLine />}
+            <PlanStrip
+              item={item}
+              dragging={dragging === item.id}
+              onDragStart={() => setDragging(item.id)}
+              onDragEnd={() => {
+                setDragging(null)
+                setOver(null)
+              }}
+            />
+            {over === index + 1 && index === departures.length - 1 && <InsertionLine />}
+          </div>
+        ))
       )}
     </div>
   )
+}
+
+/** Where the row will land. Drawn in the accent so it cannot be read as content. */
+function InsertionLine(): React.JSX.Element {
+  return <div className="bg-accent mx-4 h-0.5 rounded-full" />
 }
 
 /**
@@ -129,10 +173,22 @@ function FilePlan(): React.JSX.Element {
   )
 }
 
-function PlanStrip({ item }: { item: Departure }): React.JSX.Element {
+function PlanStrip({
+  item,
+  dragging,
+  onDragStart,
+  onDragEnd,
+}: {
+  item: Departure
+  dragging: boolean
+  onDragStart: () => void
+  onDragEnd: () => void
+}): React.JSX.Element {
   const { launchDeparture, removeDeparture, updateDeparture } = useStore()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Set while the handle is held, which is what arms `draggable`. */
+  const [grabbed, setGrabbed] = useState(false)
 
   async function launch(): Promise<void> {
     setError(null)
@@ -150,12 +206,29 @@ function PlanStrip({ item }: { item: Departure }): React.JSX.Element {
   }
 
   return (
-    <article className="border-scope-line hover:bg-surface-raised flex gap-4 border-b px-4 py-5 transition-colors">
-      <div className="flex w-[4rem] shrink-0 items-center gap-2.5 pt-0.5">
+    <article
+      // Draggable on the whole strip, but only from the handle: `draggable` on the
+      // article would make selecting the notes text start a drag instead.
+      draggable={grabbed}
+      onDragStart={onDragStart}
+      onDragEnd={() => {
+        setGrabbed(false)
+        onDragEnd()
+      }}
+      className={cn(
+        'border-scope-line hover:bg-surface-raised flex gap-4 border-b px-4 py-5 transition-colors',
+        dragging && 'opacity-40',
+      )}
+    >
+      <div className="flex w-[4rem] shrink-0 items-center gap-1.5 pt-0.5">
         <span
-          title="Filed, not yet airborne"
-          className="border-squawk-holding size-2.5 shrink-0 rounded-full border"
-        />
+          onMouseDown={() => setGrabbed(true)}
+          onMouseUp={() => setGrabbed(false)}
+          title="Drag to reorder the queue"
+          className="text-text-subtle hover:text-text -ml-1 cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical size={13} aria-hidden />
+        </span>
         <span className="field text-text-subtle text-[11px]">PLAN</span>
       </div>
 
