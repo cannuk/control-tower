@@ -266,13 +266,29 @@ ipcMain.handle('session:tune', async (_e, sessionId: string, cwd: string): Promi
    * the board you are looking at and the click.
    */
   const { entries } = await readRegistry()
-  const alive = entries.some((e) => e.sessionId === sessionId)
+  const entry = entries.find((e) => e.sessionId === sessionId)
 
-  if (alive) {
+  if (entry) {
     const focused = await cmux.focus(sessionId)
     if (focused.ok) return focused
-    // Running, but cmux has no tab for it — resuming would start a second copy, so
-    // say so rather than quietly duplicating the session.
+
+    /**
+     * Running, but cmux has no tab for it. Never resume — that would start a second
+     * copy of a session that is already going.
+     *
+     * The common case is not a closed tab, it is a session that was never in cmux:
+     * two of eighteen live sessions here run under the VS Code extension. Saying
+     * "cmux has no tab, it may have been closed" would send you looking for
+     * something that never existed, so the entrypoint is named instead. Only the
+     * cmux adapter exists so far — PLAN.md §5 layers 2 and 3, tty derivation and a
+     * configured command template, are what would make these focusable.
+     */
+    if (entry.entrypoint !== 'cli') {
+      return {
+        ok: false,
+        reason: `this session is running under ${entry.entrypoint}, not in a terminal Control Tower can focus`,
+      }
+    }
     return focused
   }
 
