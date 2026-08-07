@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { GitBranch, MapPin, TriangleAlert } from 'lucide-react'
 import { describeApproach } from '../../../shared/describe.js'
 import { headlinePr, squawk, type Board, type PrRef, type Session } from '../../../shared/types.js'
-import { dotFor } from '../lib/status.js'
+import { dotFor, sessionDim } from '../lib/status.js'
 import { absoluteTime, elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
 import { StatusChip } from './StatusChip.js'
@@ -137,7 +137,18 @@ export function FlightStrip({
         {/* The other identity. Labelled so it is never ambiguous which is which,
             and kept even when the two texts echo each other: the session name is
             the handle for the tune action, and the PR is what others see. */}
-        {lead && <Subtitle label="SESSION" text={sessionName} />}
+        {lead && (
+          <Subtitle
+            label="SESSION"
+            text={sessionName}
+            dim={sessionDim(session.transponder)}
+            title={
+              sessionDim(session.transponder)
+                ? 'No terminal is running this session — opening it resumes from the transcript'
+                : undefined
+            }
+          />
+        )}
         {trailingPr && (
           <Subtitle
             label={`PR ${trailingPr.number}`}
@@ -191,11 +202,22 @@ export function FlightStrip({
   )
 }
 
-function Subtitle({ label, text }: { label: string; text: string }): React.JSX.Element {
+function Subtitle({
+  label,
+  text,
+  dim = false,
+  title,
+}: {
+  label: string
+  text: string
+  /** The session this names has no running process. */
+  dim?: boolean
+  title?: string
+}): React.JSX.Element {
   return (
-    <p className="text-text-subtle mt-2 flex items-baseline gap-2 text-[12px]">
+    <p className="text-text-subtle mt-2 flex items-baseline gap-2 text-[12px]" title={title}>
       <span className="field shrink-0 text-[10px] tracking-wider opacity-60">{label}</span>
-      <span className="min-w-0 truncate">{text}</span>
+      <span className={cn('min-w-0 truncate', dim && 'opacity-45')}>{text}</span>
     </p>
   )
 }

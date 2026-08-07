@@ -68,7 +68,11 @@ const MARKINGS: [string, string][] = [
   ],
   ['Tune', 'Click a description to bring that session’s terminal to the front'],
   ['Cocked strip', 'Nudged right with a marked edge — the session has output you have not seen'],
-  ['Offset dot', 'See THE DOT below — one mark carrying both new activity and liveness'],
+  ['Offset dot', 'New activity only — see THE DOT below'],
+  [
+    'Dimmed session',
+    'The session name faded on APPROACH or LANDED means no terminal is running it; opening resumes from the transcript',
+  ],
 ]
 
 export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element {
