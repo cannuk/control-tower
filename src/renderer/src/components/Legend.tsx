@@ -39,7 +39,7 @@ const BOARDS: [string, string][] = [
   ['HOLDING', 'Staged work you intend to start — not a session yet'],
   [
     'EN ROUTE',
-    'Touched in the last 8 hours, with no PR yet or no human review yet. CodeRabbit does not count as a reviewer',
+    'A running session touched in the last 8 hours, with no PR yet or no human review yet. An exited session is not in flight, however recently you left it. CodeRabbit does not count as a reviewer',
   ],
   [
     'APPROACH',
@@ -71,9 +71,7 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="field text-[11px] font-semibold tracking-widest">
-              STRIP MARKING KEY
-            </h2>
+            <h2 className="field text-[11px] font-semibold tracking-widest">STRIP MARKING KEY</h2>
             <p className="text-text-subtle mt-1 text-[11px]">
               The tower vocabulary, and what each piece of it actually means.
             </p>
@@ -176,13 +174,7 @@ function Section({
   )
 }
 
-function Row({
-  left,
-  right,
-}: {
-  left: React.ReactNode
-  right: string
-}): React.JSX.Element {
+function Row({ left, right }: { left: React.ReactNode; right: string }): React.JSX.Element {
   return (
     <div className="flex items-start gap-3">
       <span className="flex w-[7.5rem] shrink-0 justify-start">{left}</span>

@@ -8,8 +8,7 @@ import { splitByBoard } from '../../shared/boards.js'
 import { useStore } from './store.js'
 
 export function App(): React.JSX.Element {
-  const { init, snapshot, board, error, bumpTick, legendOpen, toggleLegend, subscribe } =
-    useStore()
+  const { init, snapshot, board, error, bumpTick, legendOpen, toggleLegend, subscribe } = useStore()
 
   useEffect(() => {
     void init()
@@ -36,7 +35,9 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [legendOpen, toggleLegend])
 
-  const { enRoute, approach, landed, olderCount } = splitByBoard(snapshot)
+  const { enRoute, approach, landed, olderCount, collapsed } = splitByBoard(snapshot)
+  const folded =
+    board === 'approach' ? collapsed.approach : board === 'landed' ? collapsed.landed : 0
   const strips =
     board === 'approach'
       ? approach
@@ -85,12 +86,19 @@ export function App(): React.JSX.Element {
           <FlightStrip key={session.sessionId} session={session} board={board} />
         ))}
 
-        {board === 'landed' && olderCount > 0 && (
-          // Named, not silently dropped. A bounded board that admits its bound is
-          // honest; one that just stops is lossy and you cannot tell.
+        {/* Named, not silently dropped. A bounded board that admits its bound is
+            honest; one that just stops is lossy and you cannot tell. */}
+        {folded > 0 && (
           <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
-            {olderCount} SESSION{olderCount === 1 ? '' : 'S'} OFF THE BOARDS — NOTHING IN REVIEW,
-            NOTHING SHIPPED RECENTLY
+            {folded} EARLIER SESSION{folded === 1 ? '' : 'S'} FOLDED IN — ALREADY REPRESENTED BY THE
+            ROW FOR {folded === 1 ? 'ITS' : 'THEIR'} PULL REQUEST
+          </p>
+        )}
+
+        {board === 'landed' && olderCount > 0 && (
+          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
+            {olderCount} SESSION{olderCount === 1 ? '' : 'S'} OFF THE BOARDS — NOT IN FLIGHT,
+            NOTHING IN REVIEW, NOTHING SHIPPED RECENTLY
           </p>
         )}
       </main>
@@ -112,7 +120,7 @@ const EMPTY: Record<'en-route' | 'approach' | 'landed', { title: string; body: s
   },
   'en-route': {
     title: 'NOTHING IN THE AIR',
-    body: 'No session touched in the last 8 hours that is still waiting on its first human review.',
+    body: 'No running session touched in the last 8 hours that is still waiting on its first human review.',
   },
   landed: {
     title: 'NOTHING SHIPPED',

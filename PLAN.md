@@ -337,24 +337,43 @@ is.
 - **ON APPROACH** — a session holding an **unmerged PR with human review activity**. Covers both
   "changes requested, go fix it" and "approved but with follow-on comments I still want to read
   before merging". These are the rows waiting on *you*, so this board leads.
-- **EN ROUTE** — touched within `EN_ROUTE_WINDOW_HOURS` (8) and holding no human-reviewed open
-  PR. Work in flight, with or without a PR yet. The only board that answers "what is happening
-  here", so the only one that carries a state summary (§8).
+- **EN ROUTE** — a **running** session touched within `EN_ROUTE_WINDOW_HOURS` (8), holding no
+  human-reviewed open PR. Work in flight, with or without a PR yet. The only board that answers
+  "what is happening here", so the only one that carries a generated state summary (§8).
 - **LANDED** — the last `LANDED_LIMIT` (10) merged PRs, as a shipping log. A fixed count rather
   than a time window: "the last ten things I shipped" stays a useful list through both a quiet
   week and a busy one, where "the last 72 hours" is either empty or overflowing.
 - **HOLDING SHORT** — the staging area. Things queued for a session that does not exist yet.
 
-Three rules make the split behave:
+Five rules make the split behave. Every one of them exists because the board showed a row that
+should not have been there:
 
 1. **Precedence: APPROACH, then LANDED, then EN ROUTE.** A session can hold several PRs, and one
    somebody is waiting on must not be buried by a sibling that merged.
 2. **Nothing with an open PR reaches LANDED.** Not even alongside a merge — one merged sibling
    must not file a whole session under "shipped". Caught on live data: a session with two merged
    PRs and one open-but-unreviewed #2534 was sitting in LANDED.
-3. **Bots are not reviewers.** CodeRabbit comments on nearly every PR, so counting it as review
-   activity would put everything on APPROACH immediately. Detected structurally via
-   `author { __typename }` returning `Bot`, not by matching login names.
+3. **Neither bots nor you are reviewers.** CodeRabbit comments on nearly every PR, so counting it
+   would put everything on APPROACH immediately; detected structurally via
+   `author { __typename }` returning `Bot`, never by matching login names. The PR's own author is
+   excluded for the same reason one step further (§8): #2471 was on APPROACH purely because its
+   author had commented on their own work.
+4. **EN ROUTE requires the process to be alive.** Recency alone was the original rule, from when
+   that board meant "what have you touched lately". It means *in flight* now, and a session you
+   interrupted an hour ago is not that — it is the row already rejected from LANDED: left behind
+   in case it gets resumed, nothing to act on from here. Deliberately not applied to APPROACH or
+   LANDED, where a PR with feedback waiting needs you whether or not its terminal is still open.
+5. **One row per pull request on the PR-defined boards.** APPROACH and LANDED are named after a
+   PR, but the row unit is a session and a PR accumulates sessions — five PRs on a real board
+   were linked from two or three each, so #2501 appeared twice with an identical title and an
+   identical review paragraph. The representative is the most recently active session, which for
+   #2501 keeps today's "address the feedback" over the ten-day-old build session. EN ROUTE is
+   left alone: there the row *is* the session, and two sessions working toward one PR are
+   genuinely two things happening.
+
+Rules 4 and 5 both remove rows, so both report what they removed rather than quietly shrinking
+the board — a bounded view that admits its bound is honest, one that just stops is lossy and you
+cannot tell from looking.
 
 Every strip carries **both** identities — session and PR — with the board deciding which leads.
 APPROACH and LANDED exist because of a pull request, so the PR titles the row and the session
@@ -568,8 +587,16 @@ Settled:
 - **Boards are pipeline stages, not recency buckets** — see §7. Only EN ROUTE takes a recency
   bound (8h); APPROACH and LANDED are defined by PR state, which stays meaningful however long
   ago you last typed.
-- **Bots are not reviewers**, so CodeRabbit cannot promote a PR to APPROACH — see §7.
-- **Nothing with an open PR appears in LANDED** — see §7.
+- **Neither bots nor the PR author are reviewers**, so CodeRabbit cannot promote a PR to APPROACH
+  and neither can commenting on your own work — see §7 rule 3.
+- **Nothing with an open PR appears in LANDED** — see §7 rule 2.
+- **EN ROUTE requires a live process**, not just recent activity — see §7 rule 4. This reverses
+  the original "recency, not liveness" call, which was made when that board meant "touched
+  lately" rather than "in flight".
+- **PR-defined boards show one row per PR**, represented by the most recently active session —
+  see §7 rule 5.
+- **APPROACH's state line is composed from review data, not generated** — see §8. The only place
+  a model is used is EN ROUTE, where the answer exists solely as prose in a transcript.
 - **A window now**, tray/menubar popover deferred to a later milestone.
 - **SQLite via `node:sqlite`**, scoped to four non-derived things — see §4. `better-sqlite3` was
   the plan until `DatabaseSync` turned out to ship in the bundled Node 24, which removes the

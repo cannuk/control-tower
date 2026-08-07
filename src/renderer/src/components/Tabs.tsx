@@ -41,7 +41,7 @@ export function Tabs({
       id: 'en-route',
       label: 'EN ROUTE',
       count: enRouteCount,
-      title: 'Being worked — no PR yet, or no human has reviewed it',
+      title: 'Still running and being worked — no PR yet, or no human has reviewed it',
     },
     {
       id: 'approach',

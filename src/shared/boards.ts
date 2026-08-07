@@ -1,4 +1,11 @@
-import { isOpen, onApproach, type Board, type Session, type SessionSnapshot } from './types.js'
+import {
+  headlinePr,
+  isOpen,
+  onApproach,
+  type Board,
+  type Session,
+  type SessionSnapshot,
+} from './types.js'
 
 /**
  * Board classification, shared by both processes.
@@ -22,6 +29,23 @@ import { isOpen, onApproach, type Board, type Session, type SessionSnapshot } fr
  */
 export const EN_ROUTE_WINDOW_HOURS = 8
 
+/**
+ * Whether a session is in the air, rather than merely recent.
+ *
+ * Recency alone was the original rule for the active board, chosen back when that
+ * board meant "what have you touched lately". EN ROUTE means something narrower now
+ * — work actually in flight — and a session whose process has exited is not that.
+ * It is the same row that was unwanted on LANDED: interrupted, left behind in case
+ * it gets resumed, and nothing you can act on from here.
+ *
+ * Deliberately not applied to APPROACH or LANDED. Those are about a pull request,
+ * and a PR with feedback waiting needs you whether or not its terminal is still
+ * open — gating them on liveness would hide the most actionable rows on the board.
+ */
+function inFlight(session: Session, cutoff: number): boolean {
+  return session.lastContact >= cutoff && session.transponder !== 'no-contact'
+}
+
 /** How many recently merged PRs the LANDED board holds. */
 export const LANDED_LIMIT = 10
 
@@ -31,8 +55,16 @@ export interface Boards {
   enRoute: Session[]
   approach: Session[]
   landed: Session[]
-  /** Sessions on no board: nothing in review, nothing shipped recently, not recent. */
+  /** Sessions on no board: nothing in review, nothing shipped recently, not in flight. */
   olderCount: number
+  /**
+   * Sessions folded into another row because they share its pull request.
+   *
+   * Reported rather than quietly discarded. A board that drops rows without saying
+   * so reads as complete when it is not, and the count is also the signal that
+   * several sessions have worked one PR.
+   */
+  collapsed: { approach: number; landed: number }
 }
 
 /**
@@ -43,7 +75,15 @@ export interface Boards {
  * actionable thing on the board and must not be buried by a sibling that merged.
  */
 export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now()): Boards {
-  if (!snapshot) return { enRoute: [], approach: [], landed: [], olderCount: 0 }
+  if (!snapshot) {
+    return {
+      enRoute: [],
+      approach: [],
+      landed: [],
+      olderCount: 0,
+      collapsed: { approach: 0, landed: 0 },
+    }
+  }
 
   const sessions = [...snapshot.sessions].sort((a, b) => b.lastContact - a.lastContact)
 
@@ -80,7 +120,7 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
       session.prs.some((pr) => recentlyMerged.has(prKey(pr.repository, pr.number)))
     ) {
       landed.push(session)
-    } else if (session.lastContact >= cutoff) {
+    } else if (inFlight(session, cutoff)) {
       enRoute.push(session)
     } else {
       olderCount += 1
@@ -88,12 +128,62 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
   }
 
   // LANDED reads as a shipping log, so order it by merge time rather than by when
-  // the session was last touched.
+  // the session was last touched. Deduped first, while the list is still in
+  // last-contact order — that ordering is what picks the representative.
+  const shipped = oneRowPerPr(landed, 'landed')
   const mergeTime = (session: Session): number =>
     Math.max(...session.prs.map((pr) => (pr.mergedAt ? Date.parse(pr.mergedAt) : 0)), 0)
-  landed.sort((a, b) => mergeTime(b) - mergeTime(a))
+  shipped.kept.sort((a, b) => mergeTime(b) - mergeTime(a))
 
-  return { enRoute, approach, landed, olderCount }
+  const waiting = oneRowPerPr(approach, 'approach')
+
+  return {
+    enRoute,
+    approach: waiting.kept,
+    landed: shipped.kept,
+    olderCount,
+    collapsed: { approach: waiting.collapsed, landed: shipped.collapsed },
+  }
+}
+
+/**
+ * Collapse a PR-defined board to one row per pull request.
+ *
+ * APPROACH and LANDED are named after a PR, but the row unit is a session — and a
+ * PR accumulates sessions. #2501 was built in one session on 28 July and its
+ * feedback addressed in another today, so the board showed the same PR title twice
+ * with the same review paragraph under it, indistinguishable. Measured across the
+ * board: five PRs were linked from two or three sessions each.
+ *
+ * EN ROUTE is deliberately left alone. There the row *is* the session — that is the
+ * thing in flight, and two sessions working toward one PR are genuinely two things
+ * happening.
+ *
+ * The representative is the most recently active session, which relies on the input
+ * still being in last-contact order: for #2501 that keeps today's "Address PR #2501
+ * feedback" over the ten-day-old build session, which is the one you would want to
+ * tune to. Sessions with no headline PR are passed through untouched rather than
+ * collapsed together, since they have no key to collapse on.
+ */
+function oneRowPerPr(sessions: Session[], board: Board): { kept: Session[]; collapsed: number } {
+  const seen = new Set<string>()
+  const kept: Session[] = []
+  let collapsed = 0
+  for (const session of sessions) {
+    const lead = headlinePr(session, board)
+    if (!lead) {
+      kept.push(session)
+      continue
+    }
+    const key = prKey(lead.repository, lead.number)
+    if (seen.has(key)) {
+      collapsed += 1
+      continue
+    }
+    seen.add(key)
+    kept.push(session)
+  }
+  return { kept, collapsed }
 }
 
 export function sessionsOn(boards: Boards, board: Board): Session[] {
