@@ -15,7 +15,9 @@
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "package": "npm run build && electron-builder --mac --dir && npm run package:sign",
+    "package:sign": "codesign --force --deep --sign - dist/mac*/*.app && codesign --verify --deep --strict dist/mac*/*.app"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -32,6 +34,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.0",
     "lucide-react": "^0.552.0",
@@ -48,7 +51,11 @@
     "productName": "Control Tower",
     "mac": {
       "icon": "resources/icon.icns",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dir"
+      ],
+      "identity": null
     },
     "linux": {
       "icon": "resources/icon.png"
@@ -60,6 +67,10 @@
       "out/**/*",
       "resources/icon.png",
       "package.json"
-    ]
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "npmRebuild": false
   }
 }
