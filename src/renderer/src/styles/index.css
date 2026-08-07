@@ -25,6 +25,8 @@
   /* Status vocabulary — ATC convention (see tokens.css) */
   --color-cleared: var(--ct-cleared);
   --color-cleared-fg: var(--ct-cleared-fg);
+  --color-cleared-advisory: var(--ct-cleared-advisory);
+  --color-cleared-advisory-fg: var(--ct-cleared-advisory-fg);
   --color-caution: var(--ct-caution);
   --color-caution-fg: var(--ct-caution-fg);
   --color-alert: var(--ct-alert);
@@ -42,8 +44,6 @@
   --color-squawk-holding: var(--ct-squawk-holding);
   --color-squawk-lost: var(--ct-squawk-lost);
 
-  --color-advisory: var(--ct-advisory-bg);
-  --color-advisory-text: var(--ct-advisory-text);
   --color-strip-marker: var(--ct-strip-marker);
 
   /* Flight strips and data blocks are fixed-width so the eye scans a column
@@ -67,7 +67,12 @@
     /* The window is frameless, so the body IS the chrome — it must paint. */
     background-color: var(--ct-bg);
     color: var(--ct-text);
-    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
     font-size: 13px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
@@ -120,6 +125,127 @@
   .strip-cocked {
     transform: translateX(3px);
     box-shadow: inset 3px 0 0 0 var(--ct-strip-marker);
+  }
+
+  /*
+   * The scan sweep: an antenna beam crossing the rack once, when you press sweep.
+   *
+   * Rotational, not a moving band. The beam pivots on the window's bottom-right
+   * corner and swings a quarter turn — starting along the bottom edge, ending up the
+   * right edge — so the lit area is a quarter disc and the motion is angular. A
+   * translating band was the first attempt and it read as a scanner or a progress
+   * wipe; only rotation reads as an antenna.
+   *
+   * Built as an oversized disc that is *rotated*, rather than a window-sized element
+   * whose `conic-gradient` angle is animated. Animating the gradient would need an
+   * `@property` registration and repaints the element every frame; rotating a
+   * transform is GPU-composited and depends on nothing beyond CSS basics. The cost
+   * is a large layer for 1.35s, which is the right trade for a one-shot effect.
+   *
+   * Geometry: the element is a square of side 2R centred on the pivot, so it hangs
+   * off the bottom and right of the window and its own centre lands exactly on the
+   * corner — which makes the default `transform-origin` the pivot, with nothing to
+   * set. R must exceed the window diagonal for the beam to reach the far corner, and
+   * a diagonal is at most √2 × the longer side, so 145vmax covers every window size.
+   * Everything outside the window is clipped by the root's `overflow: hidden`, which
+   * is what turns a full disc into the visible quarter for free.
+   *
+   * Fired only by the manual button, never by a pushed update. The watcher pushes on
+   * every transcript write and every 60s poll, so animating those would mean the
+   * window flashing all day — the effect has to mean "I asked for this" or it is
+   * just noise.
+   *
+   * Tinted from `--ct-squawk-live` rather than a literal green, so it belongs to
+   * whichever palette is loaded. That lands green in Night Scope and Day Cab, and
+   * amber in Amber Sector — which is the correct answer there, not a compromise: a
+   * green wash is exactly what that palette exists to avoid.
+   */
+  @keyframes scan-sweep {
+    from {
+      transform: rotate(-100deg);
+      opacity: 0;
+    }
+    7% {
+      opacity: 1;
+    }
+    84% {
+      opacity: 1;
+    }
+    to {
+      transform: rotate(34deg);
+      opacity: 0;
+    }
+  }
+  .scan-sweep {
+    position: absolute;
+    /* Centre on the bottom-right corner: see the geometry note above. */
+    right: -145vmax;
+    bottom: -145vmax;
+    width: 290vmax;
+    height: 290vmax;
+    /* Never intercepts a click — it passes over live controls. */
+    pointer-events: none;
+    /*
+     * The beam, brightest at its leading edge with the afterglow trailing behind.
+     *
+     * `from 0deg` puts 0° at the top of the disc and increases clockwise, and the
+     * animation rotates clockwise, so "behind the beam" is the approach to 360°.
+     * Hence the ramp sits at 330°–360° and everything ahead of it is clear: the beam
+     * has a hard lit edge and a soft tail, which is the only ordering that reads as
+     * sweeping rather than as a smear being pushed.
+     */
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      transparent 330deg,
+      color-mix(in oklab, var(--ct-squawk-live) 13%, transparent) 348deg,
+      color-mix(in oklab, var(--ct-squawk-live) 38%, transparent) 360deg
+    );
+    /* `forwards` so it holds the final frame instead of snapping back visible for
+     * the frame between the animation ending and React unmounting it. */
+    animation: scan-sweep 1350ms ease-out forwards;
+  }
+
+  /*
+   * The sweep button's return flare: a bloom of light behind the radar glyph that
+   * expands and fades once, on click.
+   *
+   * A halo element behind the icon rather than a `filter` or `color` animation on the
+   * glyph itself. The glyph is `currentColor` and its base colour depends on hover
+   * state, so animating colour would need a keyframe ending in `inherit` — legal, but
+   * it resolves against the element rather than the hover rule and snaps on mouse-out.
+   * A separate layer has no such coupling: it blooms, fades, and unmounts, and the
+   * icon underneath is untouched.
+   *
+   * Same palette tint as the scan itself, because they are one event seen twice —
+   * the button acknowledging the press, and the rack showing the beam.
+   */
+  @keyframes radar-flare {
+    from {
+      opacity: 0;
+      transform: scale(0.55);
+    }
+    22% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(1.75);
+    }
+  }
+  .radar-flare {
+    position: absolute;
+    inset: -7px;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: radial-gradient(
+      circle,
+      color-mix(in oklab, var(--ct-squawk-live) 60%, transparent) 0%,
+      color-mix(in oklab, var(--ct-squawk-live) 22%, transparent) 45%,
+      transparent 72%
+    );
+    animation: radar-flare 900ms ease-out forwards;
   }
 
   /* One radar sweep. Slow, subtle — a status heartbeat, not an animation. */

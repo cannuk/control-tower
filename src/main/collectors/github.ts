@@ -139,9 +139,14 @@ function findGh(): string | null {
  *
  * Order is not cosmetic. CI outcome is checked before review decision because a
  * PR that is approved with failing CI is not ready — reporting `APPROVED` there
- * would be the same class of lie the advisory count exists to prevent.
+ * would be the same class of lie that splitting `cleared` from `cleared-advisory`
+ * exists to prevent.
+ *
+ * `advisories` is passed in rather than recomputed from `pr`, because deciding which
+ * threads count means excluding bots and the author, and that filtering belongs with
+ * the caller that already does it.
  */
-function toStatus(pr: GraphQlPr): PrStatus {
+function toStatus(pr: GraphQlPr, advisories: number): PrStatus {
   if (pr.state === 'MERGED') return 'landed'
   if (pr.state === 'CLOSED') return 'diverted'
   if (pr.isDraft) return 'at-gate'
@@ -151,7 +156,7 @@ function toStatus(pr: GraphQlPr): PrStatus {
   if (rollup === 'PENDING' || rollup === 'EXPECTED') return 'on-final'
 
   if (pr.reviewDecision === 'CHANGES_REQUESTED') return 'hold-short'
-  if (pr.reviewDecision === 'APPROVED') return 'cleared'
+  if (pr.reviewDecision === 'APPROVED') return advisories > 0 ? 'cleared-advisory' : 'cleared'
   // A null reviewDecision means no review has been requested or given yet, which
   // is the same actionable state as REVIEW_REQUIRED: nobody has looked.
   return 'inbound'
@@ -235,7 +240,7 @@ export async function refresh(): Promise<string[]> {
         repository,
         number: pr.number,
         title: pr.title,
-        status: toStatus(pr),
+        status: toStatus(pr, unresolved.length),
         // Human threads only — see the note on PrRef.advisories.
         advisories: unresolved.length,
         outdatedAdvisories: unresolved.filter((t) => t.isOutdated).length,

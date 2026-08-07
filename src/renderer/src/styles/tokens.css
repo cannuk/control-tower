@@ -8,13 +8,20 @@
  *
  *   - Dark scope by default. A radar display is dark so that bright symbology
  *     carries all the signal. Our default is the same: dim chrome, bright status.
- *   - The ATC color convention, used strictly:
+ *   - The ATC color convention:
  *       green  = traffic you control, proceeding normally
  *       amber  = caution / advisory — look, but nothing has failed
  *       red    = conflict alert — the one thing you must handle now
  *       cyan   = informational, another sector's problem, not yours
  *       dim    = uncorrelated or coasting target, no live data
  *     Statuses map onto this rather than picking pleasant colors.
+ *
+ *     One deliberate departure: approved-with-open-threads is a *dimmed green*,
+ *     not amber. It sits on the same axis as approved-and-mergeable — both are
+ *     "this got a yes" — and the only question is how far along that axis it is.
+ *     Amber put it on a different axis, next to changes-requested and CI failure,
+ *     which read as a setback when nothing had gone wrong. Hue carries the axis;
+ *     intensity carries the position on it.
  *   - Monospaced data fields. Flight strips and data blocks are fixed-width so
  *     the eye scans a column instead of reading each row.
  *
@@ -74,9 +81,10 @@
   --ct-squawk-holding: oklch(56% 0.018 200);
   --ct-squawk-lost: oklch(38% 0.014 200);
 
-  /* Advisory chip — "17 ADVISORIES". Amber by convention: caution, not failure. */
-  --ct-advisory-bg: oklch(28% 0.05 80);
-  --ct-advisory-text: oklch(86% 0.13 85);
+  /* Approved with threads open. Green family, dimmed — see the note on the
+   * convention above. 9.1:1 (WCAG, oklch converted through linear sRGB). */
+  --ct-cleared-advisory: oklch(30% 0.055 148);
+  --ct-cleared-advisory-fg: oklch(86% 0.14 145);
 
   /* Strip rack — the horizontal bands rows are drawn as */
   --ct-strip-marker: oklch(84% 0.16 85);
@@ -123,8 +131,12 @@
   --ct-squawk-holding: oklch(72% 0.014 210);
   --ct-squawk-lost: oklch(84% 0.008 210);
 
-  --ct-advisory-bg: oklch(93% 0.055 80);
-  --ct-advisory-text: oklch(40% 0.11 62);
+  /* Light polarity, so the muting inverts: a pale green wash under dark green
+   * text, where the solid state is a dark green fill under white. 8.1:1. Note the
+   * solid `--ct-cleared` chip in this palette measures 7.3:1, so the dimmed variant
+   * is not the weaker of the two here. */
+  --ct-cleared-advisory: oklch(93% 0.05 148);
+  --ct-cleared-advisory-fg: oklch(37% 0.12 148);
 
   --ct-strip-marker: oklch(52% 0.14 70);
   --ct-scope-line: oklch(93% 0.008 200);
@@ -172,8 +184,11 @@
   --ct-squawk-holding: oklch(52% 0.06 60);
   --ct-squawk-lost: oklch(34% 0.035 58);
 
-  --ct-advisory-bg: oklch(26% 0.06 62);
-  --ct-advisory-text: oklch(84% 0.13 76);
+  /* Near-monochrome, so hue cannot carry the distinction here at all — fill
+   * luminance does. The solid state is a bright chip with dark text; this is a
+   * dark chip with bright text, same hue family. 9.5:1. */
+  --ct-cleared-advisory: oklch(27% 0.055 70);
+  --ct-cleared-advisory-fg: oklch(85% 0.13 82);
 
   --ct-strip-marker: oklch(84% 0.14 80);
   --ct-scope-line: oklch(20% 0.024 55);

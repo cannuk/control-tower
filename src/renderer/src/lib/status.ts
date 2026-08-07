@@ -1,11 +1,13 @@
 import {
+  Check,
+  CheckCheck,
   CircleSlash,
   Hand,
-  Check,
+  MessageSquare,
+  Plane,
   PlaneLanding,
-  PlaneTakeoff,
-  RotateCcw,
   Radio,
+  RotateCcw,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react'
@@ -89,16 +91,37 @@ export const PR_STATUS: Record<PrStatus, StatusPresentation> = {
     Icon: Hand,
   },
   cleared: {
-    label: 'APPROVED',
+    label: 'READY TO MERGE',
     atc: 'cleared to land',
     chip: 'bg-cleared text-cleared-fg',
+    Icon: CheckCheck,
+  },
+  /**
+   * Approved, but threads are still open.
+   *
+   * A dimmed green rather than amber, and APPROVED rather than READY TO MERGE. Both
+   * states are on one axis — this got a yes — and the only question is how far along
+   * it they are, so hue stays constant and intensity moves. Amber implied a setback
+   * next to changes-requested and CI failure, when in fact nothing has gone wrong.
+   *
+   * The distinction still has to survive being glanced at, which is why the word
+   * changes too: "merge it" and "somebody left comments you wanted to assess first"
+   * are different actions.
+   */
+  'cleared-advisory': {
+    label: 'APPROVED',
+    atc: 'cleared to land, advisories still stand',
+    chip: 'bg-cleared-advisory text-cleared-advisory-fg',
     Icon: Check,
   },
   inbound: {
+    // Level flight, not a departure. An unreviewed PR is inbound — it is the board's
+    // whole premise that these things are arriving, and PlaneTakeoff pointed the
+    // wrong way on a tab called APPROACH.
     label: 'NEEDS REVIEW',
     atc: 'inbound, awaiting clearance',
     chip: 'bg-inbound text-inbound-fg',
-    Icon: PlaneTakeoff,
+    Icon: Plane,
   },
   'no-contact': {
     label: 'NO DATA',
@@ -118,15 +141,28 @@ export const TRANSPONDER: Record<Transponder, { dot: string; label: string }> = 
   'no-contact': { dot: 'bg-squawk-lost', label: 'No heartbeat — no contact' },
 }
 
-/** Advisories stop mattering once the PR is merged or closed. */
+/** The icon that marks the thread count inside a status chip. */
+export const ADVISORY_ICON = MessageSquare
+
+/**
+ * Whether to show the thread count at all.
+ *
+ * Unresolved threads stop being a question once the PR is merged or closed — the
+ * decision they were holding up has been taken. Showing "3" on a MERGED chip would
+ * read as outstanding work on something already finished.
+ */
 export function advisoriesAreActionable(status: PrStatus): boolean {
   return status !== 'landed' && status !== 'diverted'
 }
 
+/** The count to show inside the chip, or 0 for none. */
+export function chipAdvisories(prRef: PrRef): number {
+  return advisoriesAreActionable(prRef.status) ? prRef.advisories : 0
+}
+
 /**
  * The tooltip is where the aviation reading lives, alongside the detail the chip
- * omits: outdated threads, and the plain meaning of the approved-but-contested
- * case that the two-axis model exists to expose.
+ * omits: what the count is counting, and how much of it is stale.
  */
 export function prTooltip(prRef: PrRef): string {
   const { status, advisories, outdatedAdvisories, repository, number } = prRef
@@ -136,7 +172,7 @@ export function prTooltip(prRef: PrRef): string {
   if (advisories > 0) {
     parts.push(`${advisories} unresolved review thread${advisories === 1 ? '' : 's'}`)
     if (outdatedAdvisories > 0) parts.push(`${outdatedAdvisories} of them outdated`)
-    if (status === 'cleared') parts.push('cleared to land, but advisories still stand')
+    if (!advisoriesAreActionable(status)) parts.push('no longer actionable — the PR is closed')
   }
 
   return parts.join(' · ')

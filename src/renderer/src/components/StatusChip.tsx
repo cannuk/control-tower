@@ -1,14 +1,29 @@
 import type { PrRef } from '../../../shared/types.js'
-import { advisoriesAreActionable, PR_STATUS, prTooltip } from '../lib/status.js'
+import { ADVISORY_ICON, chipAdvisories, PR_STATUS, prTooltip } from '../lib/status.js'
 import { cn } from '../lib/utils.js'
 
 /**
- * The primary status: one chip, one flight, resolved by §6 precedence.
+ * One chip per pull request: number, status, and the count of threads still open.
+ *
+ * Unresolved threads were a second chip beside this one, on the reasoning that
+ * "approved" and "approved with 17 open threads" must not look the same. That
+ * conclusion was right and the mechanism was wrong. Two chips read as two
+ * independent facts to reconcile, when a row is only ever answering one question —
+ * what is this PR waiting on — and the count is part of that answer, not a rival to
+ * it.
+ *
+ * So the distinction moved into the status itself (`cleared` versus
+ * `cleared-advisory`, see PrStatus) where it changes the colour and the word, and
+ * the number became an attribute of the chip it qualifies. Approved-and-clean is
+ * now green and says READY; approved-with-threads is amber, says APPROVED, and
+ * carries the count.
+ *
  * Clicking opens the PR — the chip is the link, so the flight number stays
  * actionable rather than decorative.
  */
 export function StatusChip({ prRef }: { prRef: PrRef }): React.JSX.Element {
   const { label, chip, Icon, inProgress } = PR_STATUS[prRef.status]
+  const advisories = chipAdvisories(prRef)
 
   return (
     <button
@@ -22,40 +37,20 @@ export function StatusChip({ prRef }: { prRef: PrRef }): React.JSX.Element {
         chip,
       )}
     >
-      <Icon
-        size={11}
-        strokeWidth={2.5}
-        className={cn(inProgress && 'animate-sweep')}
-        aria-hidden
-      />
+      <Icon size={11} strokeWidth={2.5} className={cn(inProgress && 'animate-sweep')} aria-hidden />
       <span>{prRef.number}</span>
       <span className="opacity-75">{label}</span>
-    </button>
-  )
-}
 
-/**
- * Advisories, deliberately a sibling of the status chip rather than a variant.
- *
- * This is the whole reason the status model has two axes. A flight can be
- * approved and still be carrying unresolved discussion, and those two facts have to
- * be visible at once — `APPROVED · 17 UNRESOLVED` must not be mistakable for `APPROVED`.
- * Amber follows the ATC convention: caution, not failure.
- */
-export function AdvisoryChip({ prRef }: { prRef: PrRef }): React.JSX.Element | null {
-  if (prRef.advisories === 0) return null
-
-  return (
-    <span
-      title={prTooltip(prRef)}
-      className={cn(
-        'field rounded px-2.5 py-1.5 text-[11px] leading-none font-semibold',
-        advisoriesAreActionable(prRef.status)
-          ? 'bg-advisory text-advisory-text'
-          : 'text-text-subtle',
+      {advisories > 0 && (
+        // Divided from the label rather than merely spaced. Inside one chip the
+        // count needs to read as a separate field, or "APPROVED 19" parses as a
+        // status whose name ends in a number. `border-current` keeps the rule in
+        // whatever colour the chip already is, across all three themes.
+        <span className="ml-0.5 inline-flex items-center gap-1 border-l border-current/30 pl-2">
+          <ADVISORY_ICON size={10} strokeWidth={2.5} aria-hidden />
+          {advisories}
+        </span>
       )}
-    >
-      {prRef.advisories} UNRESOLVED
-    </span>
+    </button>
   )
 }

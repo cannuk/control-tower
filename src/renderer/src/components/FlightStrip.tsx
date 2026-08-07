@@ -5,7 +5,7 @@ import { headlinePr, squawk, type Board, type PrRef, type Session } from '../../
 import { TRANSPONDER } from '../lib/status.js'
 import { absoluteTime, elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
-import { AdvisoryChip, StatusChip } from './StatusChip.js'
+import { StatusChip } from './StatusChip.js'
 
 /**
  * One row, drawn as a flight progress strip.
@@ -175,10 +175,7 @@ export function FlightStrip({
             {[...session.prs]
               .sort((a, b) => (a.number === lead?.number ? -1 : b.number === lead?.number ? 1 : 0))
               .map((prRef) => (
-                <span key={prRef.number} className="inline-flex items-center gap-1.5">
-                  <StatusChip prRef={prRef} />
-                  <AdvisoryChip prRef={prRef} />
-                </span>
+                <StatusChip key={prRef.number} prRef={prRef} />
               ))}
           </div>
         )}

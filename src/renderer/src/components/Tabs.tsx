@@ -16,6 +16,10 @@ interface BoardSpec {
  * That ordering is the point. The previous split was by recency, which answered
  * "when did I last type here" — a fact about a process, not about whether anyone
  * is waiting on you. This answers where the work sits.
+ *
+ * Given a fixed 52px height rather than padding, so it sizes against the title bar
+ * deliberately: these are the two fixed bands above a scrolling rack, and one
+ * noticeably thinner than the other reads as an accident.
  */
 export function Tabs({
   holdingCount,
@@ -55,7 +59,7 @@ export function Tabs({
   return (
     <nav
       role="tablist"
-      className="border-border-base flex shrink-0 items-center gap-1 border-b px-3 py-2.5"
+      className="border-border-base flex h-[52px] shrink-0 items-center gap-1.5 border-b px-3"
     >
       {boards.map(({ id, label, count, title }) => (
         <button
@@ -65,7 +69,7 @@ export function Tabs({
           title={title}
           onClick={() => setBoard(id)}
           className={cn(
-            'field rounded px-3 py-2 text-[11px] font-semibold tracking-wider transition-colors',
+            'field rounded px-3.5 py-2.5 text-[11.5px] font-semibold tracking-wider transition-colors',
             board === id ? 'bg-surface-raised text-text' : 'text-text-subtle hover:text-text',
           )}
         >

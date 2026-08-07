@@ -1,14 +1,16 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { PlaneTakeoff, Radar } from 'lucide-react'
 import { FlightStrip } from './components/FlightStrip.js'
 import { Legend } from './components/Legend.js'
+import { Preferences } from './components/Preferences.js'
 import { Tabs } from './components/Tabs.js'
 import { TitleBar } from './components/TitleBar.js'
 import { splitByBoard } from '../../shared/boards.js'
 import { useStore } from './store.js'
 
 export function App(): React.JSX.Element {
-  const { init, snapshot, board, error, bumpTick, legendOpen, toggleLegend, subscribe } = useStore()
+  const { init, snapshot, board, error, bumpTick, overlay, closeOverlay, subscribe, scanId } =
+    useStore()
 
   useEffect(() => {
     void init()
@@ -25,15 +27,17 @@ export function App(): React.JSX.Element {
     return () => clearInterval(id)
   }, [bumpTick])
 
-  // Escape closes the key. Any overlay that traps you is worse than no overlay.
+  // Escape closes whichever panel is up. Any overlay that traps you is worse than
+  // no overlay, and the listener lives here rather than in the panels so it works
+  // before either has taken focus.
   useEffect(() => {
-    if (!legendOpen) return
+    if (overlay === null) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') toggleLegend()
+      if (e.key === 'Escape') closeOverlay()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [legendOpen, toggleLegend])
+  }, [overlay, closeOverlay])
 
   const { enRoute, approach, landed, olderCount, collapsed } = splitByBoard(snapshot)
   const folded =
@@ -49,7 +53,13 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="bg-bg text-text relative flex h-full flex-col overflow-hidden">
-      {legendOpen && <Legend onClose={toggleLegend} />}
+      {/* The scan sweep. Keyed on scanId so pressing sweep again restarts it mid-
+          flight, and mounted above the rack but below the panels — a sweep should
+          wash over the boards, not over an open dialog. */}
+      {scanId > 0 && <ScanSweep key={scanId} />}
+
+      {overlay === 'key' && <Legend onClose={closeOverlay} />}
+      {overlay === 'preferences' && <Preferences />}
 
       <TitleBar />
       <Tabs
@@ -126,6 +136,21 @@ const EMPTY: Record<'en-route' | 'approach' | 'landed', { title: string; body: s
     title: 'NOTHING SHIPPED',
     body: 'No pull request has merged recently.',
   },
+}
+
+/**
+ * One pass of the scan band, which removes itself when it finishes.
+ *
+ * Self-unmounting rather than left in the tree: an element with a completed
+ * `forwards` animation is still a compositing layer over the whole window, and
+ * leaving one per sweep would stack them up for the life of the session.
+ */
+function ScanSweep(): React.JSX.Element | null {
+  const [done, setDone] = useState(false)
+  if (done) return null
+  return (
+    <div aria-hidden className="scan-sweep absolute z-10" onAnimationEnd={() => setDone(true)} />
+  )
 }
 
 function Placeholder({

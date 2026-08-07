@@ -38,9 +38,17 @@ export type Transponder = 'airborne' | 'holding' | 'no-contact'
 
 /**
  * The single status a PR shows, resolved by the first-match precedence in
- * PLAN.md §6. Advisories are carried separately in `PrRef` — they qualify the
- * status rather than replacing it, which is the entire point: `CLEARED` and
- * `CLEARED · 17 ADVISORIES` must not look the same.
+ * PLAN.md §6.
+ *
+ * "Approved" is two states, not one, and that distinction is the reason this enum
+ * exists rather than a bare `reviewDecision`. Approved with every thread resolved
+ * means merge it; approved with threads still open means read them first. Those
+ * lead to different actions, so they are different states.
+ *
+ * Unresolved threads used to be a second chip beside this one. Two chips implied two
+ * independent facts and made the board harder to scan than the single question it
+ * is actually answering — what is this PR waiting on. The count is now an attribute
+ * of the status it qualifies.
  */
 export type PrStatus =
   | 'landed' /* merged */
@@ -49,7 +57,8 @@ export type PrStatus =
   | 'go-around' /* CI failing — aborted approach, must retry */
   | 'on-final' /* CI running */
   | 'hold-short' /* changes requested */
-  | 'cleared' /* approved */
+  | 'cleared' /* approved, every thread resolved — mergeable */
+  | 'cleared-advisory' /* approved, threads still open — read before merging */
   | 'inbound' /* awaiting review */
   | 'no-contact' /* fetch failed */
 
