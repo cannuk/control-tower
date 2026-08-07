@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Departure, SessionSnapshot, ThemeName, TuneResult } from '../shared/types.js'
+import type { Board, Departure, SessionSnapshot, ThemeName, TuneResult } from '../shared/types.js'
 
 /**
  * The entire renderer→main surface. Deliberately a fixed, named list rather
@@ -9,6 +9,8 @@ import type { Departure, SessionSnapshot, ThemeName, TuneResult } from '../share
 const api = {
   getTheme: (): Promise<ThemeName> => ipcRenderer.invoke('prefs:getTheme'),
   setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke('prefs:setTheme', theme),
+  getBoard: (): Promise<Board> => ipcRenderer.invoke('prefs:getBoard'),
+  setBoard: (board: Board): Promise<void> => ipcRenderer.invoke('prefs:setBoard', board),
   getSnapshot: (): Promise<SessionSnapshot> => ipcRenderer.invoke('sessions:snapshot'),
   getTitling: (): Promise<boolean> => ipcRenderer.invoke('prefs:getTitling'),
   setTitling: (on: boolean): Promise<void> => ipcRenderer.invoke('prefs:setTitling', on),

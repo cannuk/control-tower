@@ -150,9 +150,10 @@ export interface Session {
   /**
    * Which tier of §8 produced `summary`.
    *
-   * Load-bearing, not diagnostic: it is how the titler knows which sessions still
-   * need a real title, and it stops us paying to re-title a session that already
-   * has a perfectly good one from the terminal.
+   * Diagnostic only. It was once load-bearing — the titler picked candidates by
+   * skipping anything already titled — but scoping generation to EN ROUTE and
+   * caching on transcript size replaced that, and nothing reads it now. Kept because
+   * "where did this text come from" is the first question when a strip looks wrong.
    */
   summarySource: 'provider' | 'generated' | 'heuristic' | null
   /**

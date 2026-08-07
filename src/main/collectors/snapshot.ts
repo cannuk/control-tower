@@ -58,10 +58,22 @@ function toPrRefs(
 /**
  * Pick a summary and record which tier produced it.
  *
- * Order matters and is not just preference: the provider title is free and
- * already computed, our own generated title is the terminal-agnostic one, and the
- * heuristic is the floor that guarantees no strip is ever blank. Reading the
- * transcript head only happens when the first two miss.
+ * Ours wins over the terminal's, and that ordering is the entire point of §8. A
+ * provider title is written once, at the start, and then drifts: cmux titled this
+ * project's own session "Check new day skill status" while it was ten megabytes deep
+ * in building Control Tower, and the board went on showing that for hours. Ours is
+ * regenerated whenever the transcript grows, so it describes the session as it is
+ * rather than as it opened.
+ *
+ * The previous order had the provider first on the reasoning that it is free and
+ * already computed. True, and beside the point — a free answer that is wrong costs
+ * more than a cheap one that is right, and the code that generates ours cites this
+ * exact session's stale title as its justification while this function quietly
+ * preferred it.
+ *
+ * cmux's title stays as the second tier, because for a session we have not
+ * summarised yet it is still better than the opening request. The heuristic is the
+ * floor that guarantees no strip is ever blank.
  */
 function resolveSummary(
   sessionId: string,
@@ -76,10 +88,10 @@ function resolveSummary(
   // preclude us having something to say about where the work stands.
   const state = own?.state ?? null
 
+  if (own) return { summary: own.title, summarySource: 'generated', sessionState: state }
+
   const provider = providerTitles.get(sessionId)
   if (provider) return { summary: provider, summarySource: 'provider', sessionState: state }
-
-  if (own) return { summary: own.title, summarySource: 'generated', sessionState: state }
 
   // The opening message is already in hand from the conversation check above, so
   // the heuristic costs nothing more than string work.

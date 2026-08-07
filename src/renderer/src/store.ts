@@ -87,12 +87,13 @@ export const useStore = create<State>((set, get) => ({
 
   init: async () => {
     try {
-      const [theme, titling] = await Promise.all([
+      const [theme, titling, board] = await Promise.all([
         window.controlTower.getTheme(),
         window.controlTower.getTitling(),
+        window.controlTower.getBoard(),
       ])
       applyTheme(theme)
-      set({ theme, titling })
+      set({ theme, titling, board })
       await Promise.all([get().refresh(false), get().loadDepartures()])
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
@@ -105,7 +106,12 @@ export const useStore = create<State>((set, get) => ({
     await window.controlTower.setTheme(theme)
   },
 
-  setBoard: (board) => set({ board }),
+  // Written through rather than awaited: switching tabs must feel instant, and a
+  // failed write costs nothing worse than opening on the previous board next time.
+  setBoard: (board) => {
+    set({ board })
+    void window.controlTower.setBoard(board)
+  },
 
   loadDepartures: async () => {
     set({ departures: await window.controlTower.listDepartures() })

@@ -2,7 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electro
 import { join } from 'node:path'
 import Store from 'electron-store'
 import {
+  BOARDS,
   THEMES,
+  type Board,
   type Departure,
   type SessionSnapshot,
   type ThemeName,
@@ -66,6 +68,14 @@ interface Prefs {
   bounds: Bounds
   theme: ThemeName
   /**
+   * The tab you were last on.
+   *
+   * Persisted because the app is restarted often — during development constantly,
+   * and by anyone who quits it at the end of a day — and coming back to a different
+   * board than you left reads as the app having lost your place.
+   */
+  board: Board
+  /**
    * Whether to generate session titles.
    *
    * A switch rather than a constant because the CLI backend spends your Claude
@@ -79,6 +89,9 @@ const store = new Store<Prefs>({
   defaults: {
     bounds: { width: 460, height: 720 },
     theme: 'night-scope',
+    // APPROACH by default: on a first run the useful question is who is waiting on
+    // you, not what you were doing.
+    board: 'approach',
     titling: true,
   },
 })
@@ -184,6 +197,30 @@ function readTheme(): ThemeName {
 }
 
 ipcMain.handle('prefs:getTheme', (): ThemeName => readTheme())
+
+/**
+ * Validated on read, for the same reason as the display mode.
+ *
+ * A stored board name can outlive its board — `holding` became `departures` in this
+ * app's own history, and a stale value would select a tab that renders nothing while
+ * every tab looks unselected. Repair the file rather than carry the bad value.
+ */
+function readBoard(): Board {
+  const stored = store.get('board') as unknown
+  if (typeof stored === 'string' && (BOARDS as readonly string[]).includes(stored)) {
+    return stored as Board
+  }
+  const fallback: Board = 'approach'
+  store.set('board', fallback)
+  return fallback
+}
+
+ipcMain.handle('prefs:getBoard', (): Board => readBoard())
+
+ipcMain.handle('prefs:setBoard', (_e, board: Board) => {
+  if (!(BOARDS as readonly string[]).includes(board)) return
+  store.set('board', board)
+})
 
 ipcMain.handle('prefs:getTitling', (): boolean => store.get('titling') !== false)
 
