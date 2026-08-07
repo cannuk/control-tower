@@ -14,7 +14,8 @@ import { useStore } from '../store.js'
  * fixed width, scans without reading.
  */
 export function TitleBar(): React.JSX.Element {
-  const { theme, setTheme, refresh, loading, snapshot, toggleLegend } = useStore()
+  const { theme, setTheme, refresh, loading, snapshot, toggleLegend, titling, toggleTitling } =
+    useStore()
 
   return (
     <header className="drag-region border-border-base flex h-14 shrink-0 items-center gap-2.5 border-b pr-3 pl-20">
@@ -24,6 +25,24 @@ export function TitleBar(): React.JSX.Element {
       <span className="field text-text-subtle flex-1 text-[11px]">
         {snapshot ? `SWEEP ${elapsed(snapshot.sweptAt)}` : 'ACQUIRING'}
       </span>
+
+      <button
+        type="button"
+        onClick={() => void toggleTitling()}
+        title={
+          titling
+            ? 'Session titling is on — generating summaries costs Claude usage. Click to stop.'
+            : 'Session titling is off — strips fall back to their opening request. Click to resume.'
+        }
+        className={cn(
+          'no-drag hover:bg-surface-raised rounded p-1.5 transition-colors',
+          titling ? 'text-cleared' : 'text-text-subtle hover:text-text',
+        )}
+      >
+        <span className="field text-[10px] font-semibold tracking-wider">
+          {titling ? 'TITLE' : 'TITLE ○'}
+        </span>
+      </button>
 
       <button
         type="button"

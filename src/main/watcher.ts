@@ -5,7 +5,8 @@ import type { BrowserWindow } from 'electron'
 import type { SessionSnapshot } from '../shared/types.js'
 import { collect } from './collectors/snapshot.js'
 import { refresh as refreshGitHub } from './collectors/github.js'
-import { hasCredential, run as runTitler } from './titler.js'
+import Store from 'electron-store'
+import { backend as titlerBackend, run as runTitler } from './titler/index.js'
 
 /**
  * Push a fresh sweep whenever the underlying files change (PLAN.md §9, M2).
@@ -64,7 +65,8 @@ async function sweep(notify: SnapshotListener): Promise<void> {
     // Title a few sessions that still lack a real summary, then push again so the
     // new titles land. Runs after the notify so the board is never waiting on a
     // network call it does not need.
-    if (hasCredential()) {
+    const titlingOn = new Store<{ titling: boolean }>().get('titling') !== false
+    if (titlingOn && titlerBackend() !== null) {
       // Only sessions still on the heuristic floor. A provider title is already
       // an LLM summary and a generated one is ours — paying to redo either would
       // be spend for no change on screen.

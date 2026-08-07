@@ -17,12 +17,21 @@ interface Bounds {
 interface Prefs {
   bounds: Bounds
   theme: ThemeName
+  /**
+   * Whether to generate session titles.
+   *
+   * A switch rather than a constant because the CLI backend spends your Claude
+   * subscription. Small, cached, and capped — but not free, so it has to be
+   * refusable without editing code.
+   */
+  titling: boolean
 }
 
 const store = new Store<Prefs>({
   defaults: {
     bounds: { width: 460, height: 720 },
     theme: 'night-scope',
+    titling: true,
   },
 })
 
@@ -118,6 +127,12 @@ function readTheme(): ThemeName {
 }
 
 ipcMain.handle('prefs:getTheme', (): ThemeName => readTheme())
+
+ipcMain.handle('prefs:getTitling', (): boolean => store.get('titling') !== false)
+
+ipcMain.handle('prefs:setTitling', (_e, on: boolean) => {
+  store.set('titling', Boolean(on))
+})
 
 ipcMain.handle('prefs:setTheme', (_e, theme: ThemeName) => {
   if (!(THEMES as readonly string[]).includes(theme)) {

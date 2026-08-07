@@ -10,6 +10,8 @@ const api = {
   getTheme: (): Promise<ThemeName> => ipcRenderer.invoke('prefs:getTheme'),
   setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke('prefs:setTheme', theme),
   getSnapshot: (): Promise<SessionSnapshot> => ipcRenderer.invoke('sessions:snapshot'),
+  getTitling: (): Promise<boolean> => ipcRenderer.invoke('prefs:getTitling'),
+  setTitling: (on: boolean): Promise<void> => ipcRenderer.invoke('prefs:setTitling', on),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
   tune: (sessionId: string, cwd: string): Promise<TuneResult> =>
     ipcRenderer.invoke('session:tune', sessionId, cwd),

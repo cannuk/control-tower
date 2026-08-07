@@ -1,9 +1,21 @@
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
+import { projectDir as titlerProjectDir } from '../titler/cli.js'
 import * as cache from '../store/cache.js'
 
 const PROJECTS_DIR = join(homedir(), '.claude', 'projects')
+
+/**
+ * Project directories the board must never list.
+ *
+ * Our own headless titling calls write transcripts, each carrying a real user
+ * message (the prompt), so without this they appear as sessions — which would
+ * then be queued for titling, generating more of them. The titler prunes its own
+ * output, but a call in flight during a sweep would still slip through, and this
+ * closes that window.
+ */
+const EXCLUDED_PROJECT_DIRS = new Set([basename(titlerProjectDir())])
 
 /**
  * Transcript indexer (PLAN.md §2.2).
@@ -50,7 +62,7 @@ export function listTranscripts(): { transcripts: Map<string, TranscriptInfo>; w
   let projectDirs: string[]
   try {
     projectDirs = readdirSync(PROJECTS_DIR, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
+      .filter((e) => e.isDirectory() && !EXCLUDED_PROJECT_DIRS.has(e.name))
       .map((e) => join(PROJECTS_DIR, e.name))
   } catch {
     return { transcripts, warnings: ['no ~/.claude/projects directory'] }

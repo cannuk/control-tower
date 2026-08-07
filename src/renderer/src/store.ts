@@ -24,6 +24,7 @@ interface State {
   /** Bumped on an interval purely so elapsed-time fields re-render. */
   tick: number
   legendOpen: boolean
+  titling: boolean
 
   init: () => Promise<void>
   setTheme: (theme: ThemeName) => Promise<void>
@@ -31,6 +32,7 @@ interface State {
   refresh: () => Promise<void>
   bumpTick: () => void
   toggleLegend: () => void
+  toggleTitling: () => Promise<void>
   subscribe: () => () => void
 }
 
@@ -50,12 +52,16 @@ export const useStore = create<State>((set, get) => ({
   error: null,
   tick: 0,
   legendOpen: false,
+  titling: true,
 
   init: async () => {
     try {
-      const theme = await window.controlTower.getTheme()
+      const [theme, titling] = await Promise.all([
+        window.controlTower.getTheme(),
+        window.controlTower.getTitling(),
+      ])
       applyTheme(theme)
-      set({ theme })
+      set({ theme, titling })
       await get().refresh()
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
@@ -83,6 +89,12 @@ export const useStore = create<State>((set, get) => ({
   bumpTick: () => set((s) => ({ tick: s.tick + 1 })),
 
   toggleLegend: () => set((s) => ({ legendOpen: !s.legendOpen })),
+
+  toggleTitling: async () => {
+    const next = !get().titling
+    set({ titling: next })
+    await window.controlTower.setTitling(next)
+  },
 
   /**
    * Take pushed sweeps from the watcher. The initial paint still uses a pull so
