@@ -53,6 +53,19 @@ export function open(): DatabaseSync {
     );
 
     CREATE INDEX IF NOT EXISTS pr_link_session ON pr_link (session_id);
+
+    CREATE TABLE IF NOT EXISTS pr_status (
+      repository  TEXT NOT NULL,
+      number      INTEGER NOT NULL,
+      status      TEXT NOT NULL,
+      advisories  INTEGER NOT NULL,
+      outdated    INTEGER NOT NULL,
+      -- Merged and closed are final. Persisting that lets later polls skip them
+      -- entirely rather than re-asking GitHub about settled history.
+      terminal    INTEGER NOT NULL,
+      fetched_at  INTEGER NOT NULL,
+      PRIMARY KEY (repository, number)
+    );
   `)
 
   return db
@@ -145,4 +158,91 @@ export function prLinksBySession(): Map<string, StoredPrLink[]> {
 export function close(): void {
   db?.close()
   db = null
+}
+
+export interface StoredPrStatus {
+  repository: string
+  number: number
+  status: string
+  advisories: number
+  outdatedAdvisories: number
+  terminal: boolean
+  fetchedAt: number
+}
+
+/** How long an open PR's status is served from cache before a refetch. */
+const PR_STATUS_TTL_MS = 60_000
+
+/**
+ * PRs worth asking GitHub about: everything linked, minus settled ones, minus
+ * those refreshed within the TTL. Grouped by repository so the caller can build
+ * one aliased query.
+ */
+export function prsNeedingRefresh(now = Date.now()): Map<string, number[]> {
+  const rows = open()
+    .prepare(
+      `SELECT DISTINCT l.repository AS repository, l.number AS number
+       FROM pr_link l
+       LEFT JOIN pr_status s ON s.repository = l.repository AND s.number = l.number
+       WHERE s.number IS NULL
+          OR (s.terminal = 0 AND s.fetched_at < ?)
+       ORDER BY l.repository, l.number`,
+    )
+    .all(now - PR_STATUS_TTL_MS) as { repository: string; number: number }[]
+
+  const byRepo = new Map<string, number[]>()
+  for (const row of rows) {
+    const existing = byRepo.get(row.repository)
+    if (existing) existing.push(row.number)
+    else byRepo.set(row.repository, [row.number])
+  }
+  return byRepo
+}
+
+export function putPrStatus(rows: StoredPrStatus[]): void {
+  if (rows.length === 0) return
+  const database = open()
+  const upsert = database.prepare(
+    `INSERT INTO pr_status (repository, number, status, advisories, outdated, terminal, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(repository, number) DO UPDATE SET status = excluded.status,
+                                                  advisories = excluded.advisories,
+                                                  outdated = excluded.outdated,
+                                                  terminal = excluded.terminal,
+                                                  fetched_at = excluded.fetched_at`,
+  )
+  database.exec('BEGIN')
+  try {
+    for (const r of rows) {
+      upsert.run(
+        r.repository, r.number, r.status, r.advisories,
+        r.outdatedAdvisories, r.terminal ? 1 : 0, r.fetchedAt,
+      )
+    }
+    database.exec('COMMIT')
+  } catch (cause) {
+    database.exec('ROLLBACK')
+    throw cause
+  }
+}
+
+/** Last-known status for every PR, keyed `repository#number`. */
+export function prStatuses(): Map<string, StoredPrStatus> {
+  const rows = open()
+    .prepare(`SELECT repository, number, status, advisories, outdated, terminal, fetched_at
+              FROM pr_status`)
+    .all() as {
+    repository: string; number: number; status: string; advisories: number
+    outdated: number; terminal: number; fetched_at: number
+  }[]
+  return new Map(
+    rows.map((r) => [
+      `${r.repository}#${r.number}`,
+      {
+        repository: r.repository, number: r.number, status: r.status,
+        advisories: r.advisories, outdatedAdvisories: r.outdated,
+        terminal: r.terminal === 1, fetchedAt: r.fetched_at,
+      },
+    ]),
+  )
 }

@@ -23,16 +23,29 @@ import { indexPrLinks, listTranscripts, resolveCwd } from './transcripts.js'
  * would erase your history the moment a process died.
  */
 
-/** PR state comes from GitHub in M3; until then links are known but unlabelled. */
-function toPrRefs(sessionId: string, links: Map<string, cache.StoredPrLink[]>): PrRef[] {
-  return (links.get(sessionId) ?? []).map((link) => ({
-    number: link.number,
-    url: link.url,
-    repository: link.repository,
-    status: 'no-contact' as const,
-    advisories: 0,
-    outdatedAdvisories: 0,
-  }))
+/**
+ * Join a session's PR links to their last-known GitHub state.
+ *
+ * A link with no cached status renders as `no-contact` rather than being hidden:
+ * the PR provably exists — the session created it — so dropping it would be a
+ * worse lie than admitting the state is unknown.
+ */
+function toPrRefs(
+  sessionId: string,
+  links: Map<string, cache.StoredPrLink[]>,
+  statuses: Map<string, cache.StoredPrStatus>,
+): PrRef[] {
+  return (links.get(sessionId) ?? []).map((link) => {
+    const known = statuses.get(link.repository + "#" + link.number)
+    return {
+      number: link.number,
+      url: link.url,
+      repository: link.repository,
+      status: (known?.status as PrRef['status']) ?? 'no-contact',
+      advisories: known?.advisories ?? 0,
+      outdatedAdvisories: known?.outdatedAdvisories ?? 0,
+    }
+  })
 }
 
 function transponderFor(
@@ -63,6 +76,7 @@ export async function collect(): Promise<SessionSnapshot> {
   }
 
   const prLinks = cache.prLinksBySession()
+  const prStatuses = cache.prStatuses()
   const titles = cmux.titles()
   const byPid = new Map(entries.map((e) => [e.sessionId, e]))
 
@@ -90,7 +104,7 @@ export async function collect(): Promise<SessionSnapshot> {
       lastContact: info.mtimeMs,
       startedAt: entry?.startedAt ?? null,
       transcriptPath: info.path,
-      prs: toPrRefs(sessionId, prLinks),
+      prs: toPrRefs(sessionId, prLinks, prStatuses),
       // Resolved at click time by the provider (see cmux.focus), so this only
       // records whether tuning is plausible at all.
       location: entry ? { providerId: 'cmux', handle: sessionId, exact: true } : null,

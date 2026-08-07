@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import type { SessionSnapshot } from '../shared/types.js'
 import { collect } from './collectors/snapshot.js'
+import { refresh as refreshGitHub } from './collectors/github.js'
 
 /**
  * Push a fresh sweep whenever the underlying files change (PLAN.md §9, M2).
@@ -27,6 +28,13 @@ import { collect } from './collectors/snapshot.js'
 
 const DEBOUNCE_MS = 500
 
+/**
+ * GitHub poll interval. One batched query costs 1 rate-limit point regardless of
+ * PR count, so 60s spends about 1% of the hourly budget — this interval is set by
+ * how fresh you want CI state, not by any limit.
+ */
+const GITHUB_POLL_MS = 60_000
+
 const CLAUDE_DIR = join(homedir(), '.claude')
 const WATCH_PATHS = [
   join(CLAUDE_DIR, 'sessions'),
@@ -38,6 +46,7 @@ let watcher: FSWatcher | null = null
 let timer: NodeJS.Timeout | null = null
 let sweeping = false
 let sweepAgain = false
+let githubTimer: NodeJS.Timeout | null = null
 
 export type SnapshotListener = (snapshot: SessionSnapshot) => void
 
@@ -69,8 +78,23 @@ function schedule(notify: SnapshotListener): void {
   timer = setTimeout(() => void sweep(notify), DEBOUNCE_MS)
 }
 
+/**
+ * Fetch PR state, then sweep so the new state reaches the board.
+ *
+ * Ordered this way deliberately: refreshing without a following sweep writes
+ * fresh status into the cache that nothing reads until the next unrelated file
+ * change, leaving the board on stale chips for no visible reason.
+ */
+async function pollGitHub(notify: SnapshotListener): Promise<void> {
+  const warnings = await refreshGitHub()
+  if (warnings.length > 0) console.warn(warnings.join('; '))
+  await sweep(notify)
+}
+
 export function start(notify: SnapshotListener): void {
   void sweep(notify) // paint something before the first file event
+  void pollGitHub(notify)
+  githubTimer = setInterval(() => void pollGitHub(notify), GITHUB_POLL_MS)
 
   watcher = chokidar.watch(WATCH_PATHS, {
     ignoreInitial: true,
@@ -90,6 +114,8 @@ export function start(notify: SnapshotListener): void {
 export function stop(): void {
   if (timer) clearTimeout(timer)
   timer = null
+  if (githubTimer) clearInterval(githubTimer)
+  githubTimer = null
   void watcher?.close()
   watcher = null
 }
