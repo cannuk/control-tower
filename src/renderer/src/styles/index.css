@@ -44,8 +44,6 @@
   --color-squawk-holding: var(--ct-squawk-holding);
   --color-squawk-lost: var(--ct-squawk-lost);
 
-  --color-strip-marker: var(--ct-strip-marker);
-
   /* Flight strips and data blocks are fixed-width so the eye scans a column
    * rather than reading each row. Prose (the flight description) stays
    * proportional — monospacing a full sentence hurts more than it helps. */
@@ -114,17 +112,6 @@
     font-family: var(--font-data);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
-  }
-
-  /*
-   * A cocked strip. Controllers physically rotate a flight progress strip out of
-   * the rack to flag one needing attention — the offset is the signal, visible
-   * from across the room without reading anything. Our equivalent for unread
-   * output: nudge the strip and mark its leading edge.
-   */
-  .strip-cocked {
-    transform: translateX(3px);
-    box-shadow: inset 3px 0 0 0 var(--ct-strip-marker);
   }
 
   /*

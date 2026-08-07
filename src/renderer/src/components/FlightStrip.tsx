@@ -88,12 +88,7 @@ export function FlightStrip({
   }
 
   return (
-    <article
-      className={cn(
-        'border-scope-line hover:bg-surface-raised flex gap-4 border-b px-4 py-5 transition-colors',
-        session.unread && 'strip-cocked',
-      )}
-    >
+    <article className="border-scope-line hover:bg-surface-raised flex gap-4 border-b px-4 py-5 transition-colors">
       {/* Fixed gutter — the squawk is always four characters in a monospaced
           face, so this column is the same width on every strip. */}
       <div className="flex w-[4rem] shrink-0 items-center gap-2.5 pt-0.5">

@@ -90,7 +90,6 @@
   --ct-cleared-advisory-fg: oklch(86% 0.14 145);
 
   /* Strip rack — the horizontal bands rows are drawn as */
-  --ct-strip-marker: oklch(84% 0.16 85);
   --ct-scope-line: oklch(22% 0.016 200);
 }
 
@@ -142,7 +141,6 @@
   --ct-cleared-advisory: oklch(93% 0.05 148);
   --ct-cleared-advisory-fg: oklch(37% 0.12 148);
 
-  --ct-strip-marker: oklch(52% 0.14 70);
   --ct-scope-line: oklch(93% 0.008 200);
 }
 
@@ -196,6 +194,5 @@
   --ct-cleared-advisory: oklch(27% 0.055 70);
   --ct-cleared-advisory-fg: oklch(85% 0.13 82);
 
-  --ct-strip-marker: oklch(84% 0.14 80);
   --ct-scope-line: oklch(20% 0.024 55);
 }

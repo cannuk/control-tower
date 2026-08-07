@@ -67,7 +67,6 @@ const MARKINGS: [string, string][] = [
     'A refresh — every session re-read, PR status refetched. The radar button sweeps on demand; hover it to see how stale the board is',
   ],
   ['Tune', 'Click a description to bring that session’s terminal to the front'],
-  ['Cocked strip', 'Nudged right with a marked edge — the session has output you have not seen'],
   ['Offset dot', 'New activity only — see THE DOT below'],
   [
     'Dimmed session',
