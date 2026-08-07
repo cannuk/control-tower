@@ -537,3 +537,41 @@ export function seedRead(entries: { sessionId: string; lastContact: number }[]):
     throw cause
   }
 }
+
+/**
+ * Sessions you have parked on HOLDING.
+ *
+ * The only board membership in the app that is a decision rather than an inference,
+ * so it has to be stored — and stored here with the read marks rather than in a
+ * rebuildable cache, for the same reason: nothing on disk could reconstruct it.
+ */
+function ensureHoldTable(): void {
+  open().exec(`
+    CREATE TABLE IF NOT EXISTS session_hold (
+      session_id  TEXT PRIMARY KEY,
+      held_at     INTEGER NOT NULL
+    );
+  `)
+}
+
+export function heldSessions(): Set<string> {
+  ensureHoldTable()
+  const rows = open().prepare('SELECT session_id FROM session_hold').all() as {
+    session_id: string
+  }[]
+  return new Set(rows.map((r) => r.session_id))
+}
+
+export function setHeld(sessionId: string, held: boolean): void {
+  ensureHoldTable()
+  const database = open()
+  if (held) {
+    database
+      .prepare(
+        'INSERT INTO session_hold (session_id, held_at) VALUES (?, ?) ON CONFLICT DO NOTHING',
+      )
+      .run(sessionId, Date.now())
+  } else {
+    database.prepare('DELETE FROM session_hold WHERE session_id = ?').run(sessionId)
+  }
+}

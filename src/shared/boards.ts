@@ -53,6 +53,8 @@ const prKey = (repository: string, number: number): string => repository + '#' +
 
 export interface Boards {
   enRoute: Session[]
+  /** Parked by you — see the HOLDING branch in splitByBoard. */
+  holding: Session[]
   approach: Session[]
   landed: Session[]
   /** Sessions on no board: nothing in review, nothing shipped recently, not in flight. */
@@ -78,6 +80,7 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
   if (!snapshot) {
     return {
       enRoute: [],
+      holding: [],
       approach: [],
       landed: [],
       olderCount: 0,
@@ -106,6 +109,7 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
   const cutoff = now - EN_ROUTE_WINDOW_HOURS * 3600_000
   const approach: Session[] = []
   const landed: Session[] = []
+  const holding: Session[] = []
   const enRoute: Session[] = []
   let olderCount = 0
 
@@ -120,6 +124,20 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
       session.prs.some((pr) => recentlyMerged.has(prKey(pr.repository, pr.number)))
     ) {
       landed.push(session)
+    } else if (session.held) {
+      /**
+       * Parked, and deliberately exempt from both EN ROUTE bounds.
+       *
+       * No recency window and no liveness check, because the point of parking
+       * something is that it stops mattering how long ago you touched it — a hold
+       * that expired after eight hours, or the moment you quit the terminal, would
+       * lose exactly what you asked it to keep.
+       *
+       * It sits *below* APPROACH and LANDED on purpose: parking says "not what I am
+       * working on", and a PR someone is waiting on outranks that. A held session
+       * whose PR gets reviewed reappears on APPROACH rather than staying buried.
+       */
+      holding.push(session)
     } else if (inFlight(session, cutoff)) {
       enRoute.push(session)
     } else {
@@ -139,6 +157,7 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
 
   return {
     enRoute,
+    holding,
     approach: waiting.kept,
     landed: shipped.kept,
     olderCount,
@@ -192,6 +211,8 @@ export function sessionsOn(boards: Boards, board: Board): Session[] {
       return boards.approach
     case 'en-route':
       return boards.enRoute
+    case 'holding':
+      return boards.holding
     case 'landed':
       return boards.landed
     case 'departures':

@@ -51,6 +51,10 @@ const BOARDS: [string, string][] = [
     'A running session touched in the last 8 hours, with no PR yet or no human review yet. An exited session is not in flight, however recently you left it. CodeRabbit does not count as a reviewer',
   ],
   [
+    'HOLDING',
+    'Sessions you parked yourself — the one board Control Tower does not decide. No time limit and no liveness check, so a hold keeps something exactly as long as you want it kept',
+  ],
+  [
     'APPROACH',
     'An unmerged PR a human has reviewed or commented on — feedback to address, or an approval with comments worth reading first',
   ],

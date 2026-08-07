@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { GitBranch, MapPin, TriangleAlert } from 'lucide-react'
+import { GitBranch, MapPin, PauseCircle, PlayCircle, TriangleAlert } from 'lucide-react'
 import { describeApproach } from '../../../shared/describe.js'
 import { headlinePr, squawk, type Board, type PrRef, type Session } from '../../../shared/types.js'
 import { dotFor, sessionDim } from '../lib/status.js'
 import { absoluteTime, elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
+import { useStore } from '../store.js'
 import { StatusChip } from './StatusChip.js'
 
 /**
@@ -36,6 +37,7 @@ export function FlightStrip({
   board: Board
 }): React.JSX.Element {
   const dot = dotFor(session.transponder, session.unread)
+  const { setHeld } = useStore()
   const [tuneError, setTuneError] = useState<string | null>(null)
 
   const lead = headlinePr(session, board)
@@ -55,6 +57,9 @@ export function FlightStrip({
    * The state line, from whichever source the board has.
    *
    * APPROACH is composed from review data and EN ROUTE from a generated summary.
+   * HOLDING shows the generated one too, frozen: the titler only summarises EN ROUTE,
+   * so a parked session keeps whatever it last said. That is the right answer here —
+   * coming back to a hold, the question is what this was doing when you parked it.
    * APPROACH takes the deterministic one even if a summary happens to exist: the
    * row is there because a PR needs attention, and exactly who is waiting on what
    * beats a paraphrase of the conversation that produced it.
@@ -62,7 +67,7 @@ export function FlightStrip({
   const state =
     board === 'approach'
       ? describeApproach(session)
-      : board === 'en-route'
+      : board === 'en-route' || board === 'holding'
         ? session.sessionState
         : null
 
@@ -170,6 +175,37 @@ export function FlightStrip({
               <span className="field max-w-[18rem] truncate">{session.gitBranch}</span>
               {session.gitDirty && <span title="Uncommitted changes">*</span>}
             </span>
+          )}
+
+          {/*
+            Only on the two boards a session can move between. APPROACH and LANDED are
+            defined by PR state, so parking a row there would either do nothing visible
+            or hide something somebody is waiting on — the control would be a lie
+            either way.
+
+            Right-aligned and quiet: it is an occasional action, not part of reading
+            the row, and it should not compete with origin and branch for the eye.
+          */}
+          {(board === 'en-route' || board === 'holding') && (
+            <button
+              type="button"
+              onClick={() => void setHeld(session.sessionId, board === 'en-route')}
+              title={
+                board === 'en-route'
+                  ? 'Park this on HOLDING — out of EN ROUTE, kept indefinitely'
+                  : 'Send this back to EN ROUTE'
+              }
+              className="no-drag hover:bg-surface hover:text-text ml-auto inline-flex items-center gap-1.5 rounded px-2 py-1 transition-colors"
+            >
+              {board === 'en-route' ? (
+                <PauseCircle size={12} aria-hidden />
+              ) : (
+                <PlayCircle size={12} aria-hidden />
+              )}
+              <span className="field text-[10px] font-semibold tracking-wider">
+                {board === 'en-route' ? 'HOLD' : 'RELEASE'}
+              </span>
+            </button>
           )}
         </div>
 

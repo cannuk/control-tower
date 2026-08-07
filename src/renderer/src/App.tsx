@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { Board } from '../../shared/types.js'
 import { Radar } from 'lucide-react'
 import { FlightStrip } from './components/FlightStrip.js'
 import { Departures } from './components/Departures.js'
@@ -6,7 +7,7 @@ import { Legend } from './components/Legend.js'
 import { Preferences } from './components/Preferences.js'
 import { Tabs } from './components/Tabs.js'
 import { TitleBar } from './components/TitleBar.js'
-import { splitByBoard } from '../../shared/boards.js'
+import { sessionsOn, splitByBoard } from '../../shared/boards.js'
 
 import { useStore } from './store.js'
 
@@ -51,17 +52,11 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [overlay, closeOverlay])
 
-  const { enRoute, approach, landed, olderCount, collapsed } = splitByBoard(snapshot)
+  const boards = splitByBoard(snapshot)
+  const { enRoute, holding, approach, landed, olderCount, collapsed } = boards
   const folded =
     board === 'approach' ? collapsed.approach : board === 'landed' ? collapsed.landed : 0
-  const strips =
-    board === 'approach'
-      ? approach
-      : board === 'en-route'
-        ? enRoute
-        : board === 'landed'
-          ? landed
-          : []
+  const strips = sessionsOn(boards, board)
 
   return (
     <div className="bg-bg text-text relative flex h-full flex-col overflow-hidden">
@@ -78,6 +73,7 @@ export function App(): React.JSX.Element {
         counts={{
           departures: departures.length,
           'en-route': enRoute.length,
+          holding: holding.length,
           approach: approach.length,
           landed: landed.length,
         }}
@@ -85,6 +81,7 @@ export function App(): React.JSX.Element {
           // A filed plan has no session and so no activity to have missed.
           departures: false,
           'en-route': enRoute.some((s) => s.unread),
+          holding: holding.some((s) => s.unread),
           approach: approach.some((s) => s.unread),
           landed: landed.some((s) => s.unread),
         }}
@@ -138,7 +135,7 @@ export function App(): React.JSX.Element {
 }
 
 /** Empty-state copy per board, so "nothing here" still says what it means. */
-const EMPTY: Record<'en-route' | 'approach' | 'landed', { title: string; body: string }> = {
+const EMPTY: Record<Exclude<Board, 'departures'>, { title: string; body: string }> = {
   approach: {
     title: 'NOBODY WAITING',
     body: 'No unmerged PR has been reviewed or commented on by a human. Nothing needs a decision from you right now.',
@@ -146,6 +143,10 @@ const EMPTY: Record<'en-route' | 'approach' | 'landed', { title: string; body: s
   'en-route': {
     title: 'NOTHING IN THE AIR',
     body: 'No running session touched in the last 8 hours that is still waiting on its first human review.',
+  },
+  holding: {
+    title: 'NOTHING PARKED',
+    body: 'Sessions you send here leave EN ROUTE without disappearing — no time limit, and they stay even after the terminal closes. Use HOLD on a row to park one.',
   },
   landed: {
     title: 'NOTHING SHIPPED',

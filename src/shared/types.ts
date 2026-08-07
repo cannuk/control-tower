@@ -31,10 +31,10 @@ export const THEME_HINTS: Record<ThemeName, string> = {
 
 /**
  * Transponder state, from the registry heartbeat (PLAN.md §2.1).
- * `airborne` = working now, `holding` = alive and idle, `no-contact` = process
+ * `airborne` = working now, `idle` = alive but not mid-turn, `no-contact` = process
  * gone or never reported (the uncorrelated target).
  */
-export type Transponder = 'airborne' | 'holding' | 'no-contact'
+export type Transponder = 'airborne' | 'idle' | 'no-contact'
 
 /**
  * The single status a PR shows, resolved by the first-match precedence in
@@ -175,8 +175,16 @@ export interface Session {
   transcriptPath: string | null
   prs: PrRef[]
   location: SessionLocation | null
-  /** Provider reports output the user hasn't seen — the cocked strip. */
+  /** New activity since you last opened it. Drives the dot and the tab dots. */
   unread: boolean
+  /**
+   * Parked by you, deliberately.
+   *
+   * The only board membership Control Tower does not infer. Everything else is
+   * derived from a transcript, a process or GitHub; this is a session you decided is
+   * not what you are working on right now and do not want cluttering EN ROUTE.
+   */
+  held: boolean
 }
 
 /** What the main process pushes to the renderer on every radar sweep. */
@@ -208,9 +216,9 @@ export function squawk(sessionId: string): string {
  * process; it says nothing about whether you owe anybody anything. Position in
  * the review pipeline does.
  */
-export type Board = 'departures' | 'en-route' | 'approach' | 'landed'
+export type Board = 'departures' | 'en-route' | 'holding' | 'approach' | 'landed'
 
-export const BOARDS: Board[] = ['departures', 'en-route', 'approach', 'landed']
+export const BOARDS: Board[] = ['departures', 'en-route', 'holding', 'approach', 'landed']
 
 /**
  * This PR is on approach: still flying, and a human has been in the loop.

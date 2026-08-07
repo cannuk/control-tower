@@ -51,6 +51,12 @@ export function Tabs({
       title: 'Still running and being worked — no PR yet, or no human has reviewed it',
     },
     {
+      id: 'holding',
+      label: 'HOLDING',
+      count: counts.holding,
+      title: 'Parked by you — out of EN ROUTE without being forgotten',
+    },
+    {
       id: 'approach',
       label: 'APPROACH',
       count: counts.approach,

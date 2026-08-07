@@ -54,6 +54,7 @@ interface State {
   ) => Promise<void>
   removeDeparture: (id: number) => Promise<void>
   moveDeparture: (id: number, index: number) => Promise<void>
+  setHeld: (sessionId: string, held: boolean) => Promise<void>
   launchDeparture: (id: number) => Promise<string | null>
   bumpTick: () => void
   /** Open a panel, or pass the open one to close it. */
@@ -188,6 +189,27 @@ export const useStore = create<State>((set, get) => ({
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
     }
+  },
+
+  /**
+   * Park a session on HOLDING, or send it back.
+   *
+   * Applied locally before the round trip so the row leaves the board on click. The
+   * sweep that follows confirms it; without this the row sits there until the next
+   * push and the button reads as broken.
+   */
+  setHeld: async (sessionId, held) => {
+    const snapshot = get().snapshot
+    if (snapshot) {
+      set({
+        snapshot: {
+          ...snapshot,
+          sessions: snapshot.sessions.map((s) => (s.sessionId === sessionId ? { ...s, held } : s)),
+        },
+      })
+    }
+    await window.controlTower.setHeld(sessionId, held)
+    await get().refresh(false)
   },
 
   bumpTick: () => set((s) => ({ tick: s.tick + 1 })),

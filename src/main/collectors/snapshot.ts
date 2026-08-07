@@ -101,13 +101,20 @@ function resolveSummary(
   return { summary: null, summarySource: null, sessionState: state }
 }
 
+/**
+ * Liveness, from the registry heartbeat.
+ *
+ * The middle state is `idle`, not `holding`. HOLDING is now a board you put things
+ * on, and one word meaning both "the process is not mid-turn" and "I parked this"
+ * is the same collision `hold-short` already caused — a name that reads right in
+ * two places and means different things in each.
+ */
 function transponderFor(status: 'busy' | 'idle' | null, isLive: boolean): Transponder {
   if (!isLive) return 'no-contact'
   if (status === 'busy') return 'airborne'
-  if (status === 'idle') return 'holding'
   // Live but silent: the `claude-vscode` entrypoint never writes a heartbeat, so
   // absence of status is not absence of life.
-  return 'holding'
+  return 'idle'
 }
 
 export async function collect(): Promise<SessionSnapshot> {
@@ -126,6 +133,7 @@ export async function collect(): Promise<SessionSnapshot> {
   }
 
   const readMarks = cache.readMarks()
+  const held = cache.heldSessions()
   const prLinks = cache.prLinksBySession()
   const prStatuses = cache.prStatuses()
   const providerTitles = cmux.titles()
@@ -187,6 +195,7 @@ export async function collect(): Promise<SessionSnapshot> {
        * teaches you to ignore it.
        */
       unread: info.mtimeMs > (readMarks.get(sessionId) ?? info.mtimeMs),
+      held: held.has(sessionId),
     })
   }
 

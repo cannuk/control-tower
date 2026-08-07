@@ -342,6 +342,11 @@ ipcMain.handle('session:markRead', (_e, sessionId: string, at: number) => {
   cacheStore.markRead(sessionId, at)
 })
 
+ipcMain.handle('session:setHeld', (_e, sessionId: string, held: boolean) => {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return
+  cacheStore.setHeld(sessionId, Boolean(held))
+})
+
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   // Only ever hand http(s) to the OS — a file:// or custom scheme from the
   // renderer would be a way to launch arbitrary local handlers.

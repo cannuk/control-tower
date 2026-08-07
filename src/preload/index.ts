@@ -19,6 +19,8 @@ const api = {
     ipcRenderer.invoke('session:tune', sessionId, cwd),
   markRead: (sessionId: string, at: number): Promise<void> =>
     ipcRenderer.invoke('session:markRead', sessionId, at),
+  setHeld: (sessionId: string, held: boolean): Promise<void> =>
+    ipcRenderer.invoke('session:setHeld', sessionId, held),
 
   /**
    * Subscribe to pushed sweeps. Returns an unsubscribe function — without one,
