@@ -196,15 +196,64 @@ export function indexPrLinks(transcripts: Map<string, TranscriptInfo>): void {
 }
 
 /**
- * Recover the real working directory for a project directory name.
+ * The working directory a transcript records for itself.
  *
- * Claude mangles the cwd into the directory name by replacing both `/` and `_`
- * with `-`, which is not reversible: `my_app` and `my/app` produce the same name.
- * So prefer a decode that actually exists on disk, and treat the registry's cwd
- * as authoritative when it is available.
+ * Every record carries `cwd`, so the answer is sitting in the first line of the file.
+ * Only the head is read: it is written once at session start and never changes.
  */
-export function resolveCwd(projectDirName: string, registryCwd: string | null): string {
+function recordedCwd(path: string): string | null {
+  let fd: number | null = null
+  try {
+    fd = openSync(path, 'r')
+    const buffer = Buffer.allocUnsafe(8192)
+    const read = readSync(fd, buffer, 0, 8192, 0)
+    for (const line of buffer.toString('utf8', 0, read).split('\n')) {
+      if (!line.startsWith('{')) continue
+      try {
+        const parsed = JSON.parse(line) as { cwd?: unknown }
+        if (typeof parsed.cwd === 'string' && parsed.cwd.length > 0) return parsed.cwd
+      } catch {
+        break // truncated line: nothing complete left in the window
+      }
+    }
+  } catch {
+    /* unreadable */
+  } finally {
+    if (fd !== null) closeSync(fd)
+  }
+  return null
+}
+
+/**
+ * Recover the real working directory for a session.
+ *
+ * The directory name cannot supply this and it took measuring to see why. Claude
+ * mangles a cwd into a directory name by replacing **every** non-alphanumeric
+ * character with `-`, not just separators, so the transform is lossy in a way no
+ * decode can undo: `Claude_Cowork_Plugins_Skills` and `Claude/Cowork/Plugins/Skills`
+ * are the same directory name, and any path containing `@` or `.` — every path under
+ * a home directory like `sean@gladly.com` — decodes to something that does not exist.
+ *
+ * The previous version guessed by turning `-` back into `/` and kept the result only
+ * if it existed on disk. Measured against 116 real transcripts it was right **zero**
+ * times, falling back to returning the mangled directory name itself. That is not a
+ * path, which is why tuning to a session with no live process failed: the resume
+ * handed cmux a workspace directory that could not exist. It also meant those rows
+ * displayed the whole mangled string as their project name.
+ *
+ * So: the registry when the process is alive, then the transcript's own record, and
+ * the decode only as a last resort for the handful of transcripts that record no cwd.
+ */
+export function resolveCwd(
+  projectDirName: string,
+  registryCwd: string | null,
+  transcriptPath: string | null = null,
+): string {
   if (registryCwd) return registryCwd
+  if (transcriptPath) {
+    const recorded = recordedCwd(transcriptPath)
+    if (recorded) return recorded
+  }
   const decoded = '/' + projectDirName.replace(/^-/, '').replace(/-/g, '/')
   return existsSync(decoded) ? decoded : projectDirName
 }

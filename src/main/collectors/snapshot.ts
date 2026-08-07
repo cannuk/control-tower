@@ -142,7 +142,9 @@ export async function collect(): Promise<SessionSnapshot> {
 
     const entry = byPid.get(sessionId)
     const projectDirName = basename(dirname(info.path))
-    const cwd = resolveCwd(projectDirName, entry?.cwd ?? null)
+    // The transcript is passed so a session with no live process can still report
+    // where it ran — see resolveCwd.
+    const cwd = resolveCwd(projectDirName, entry?.cwd ?? null, info.path)
     cwds.add(cwd)
 
     sessions.push({
