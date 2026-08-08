@@ -245,7 +245,13 @@ export function onApproach(pr: PrRef): boolean {
  * likely to have in mind.
  */
 export function headlinePr(session: Session, board: Board): PrRef | null {
-  if (board === 'approach') {
+  /**
+   * HOLDING is the one mixed board: rows arrive from EN ROUTE with no PR and from
+   * APPROACH with one. So it asks the same question APPROACH does and falls back to
+   * the session when there is no answer — parking a PR row must not cost it the
+   * identity you parked it for.
+   */
+  if (board === 'approach' || board === 'holding') {
     const candidates = session.prs.filter(onApproach)
     return candidates.sort((a, b) => b.number - a.number)[0] ?? null
   }

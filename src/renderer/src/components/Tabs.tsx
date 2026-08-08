@@ -48,7 +48,7 @@ export function Tabs({
       id: 'holding',
       label: 'HOLDING',
       count: counts.holding,
-      title: 'Parked by you — out of EN ROUTE without being forgotten',
+      title: 'Parked by you — set aside without being forgotten',
     },
     {
       id: 'en-route',

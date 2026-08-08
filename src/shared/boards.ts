@@ -114,30 +114,38 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
   let olderCount = 0
 
   for (const session of sessions) {
-    if (session.prs.some(onApproach)) {
-      approach.push(session)
-    } else if (
+    if (
       // LANDED means finished, so nothing still in flight may appear — not even
       // alongside a merge. One merged sibling must not file a whole session under
-      // "shipped" while an open PR sits inside it.
+      // "shipped" while an open PR sits inside it. That guard is also why LANDED can
+      // be tested first without burying a PR someone is waiting on: a session with an
+      // open reviewed PR can never satisfy it.
       !session.prs.some(isOpen) &&
       session.prs.some((pr) => recentlyMerged.has(prKey(pr.repository, pr.number)))
     ) {
       landed.push(session)
     } else if (session.held) {
       /**
-       * Parked, and deliberately exempt from both EN ROUTE bounds.
+       * Parked. A decision, so it outranks every inference below it.
        *
-       * No recency window and no liveness check, because the point of parking
-       * something is that it stops mattering how long ago you touched it — a hold
-       * that expired after eight hours, or the moment you quit the terminal, would
-       * lose exactly what you asked it to keep.
+       * It used to sit below APPROACH, on the reasoning that a PR somebody is
+       * waiting on outranks your having parked it. That was wrong about what parking
+       * an APPROACH row means: "approved, but I am not merging this yet" is a
+       * decision about *your* next move, not a way to hide someone else's review.
+       * Refusing to park those left the one case with a real reason to wait — a
+       * release window, a dependency, a deliberate pause — as the only row that could
+       * not be moved off the board.
        *
-       * It sits *below* APPROACH and LANDED on purpose: parking says "not what I am
-       * working on", and a PR someone is waiting on outranks that. A held session
-       * whose PR gets reviewed reappears on APPROACH rather than staying buried.
+       * Still below LANDED, because a merged PR has nothing left to wait for and a
+       * hold on it would be a hold on nothing.
+       *
+       * Deliberately exempt from both EN ROUTE bounds: no recency window and no
+       * liveness check, since a hold that expired after eight hours or the moment you
+       * quit the terminal would lose exactly what you asked it to keep.
        */
       holding.push(session)
+    } else if (session.prs.some(onApproach)) {
+      approach.push(session)
     } else if (inFlight(session, cutoff)) {
       enRoute.push(session)
     } else {

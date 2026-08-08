@@ -109,12 +109,15 @@ describe('APPROACH', () => {
     expect(landed).toHaveLength(0)
   })
 
-  it('outranks a hold, because a review is somebody else waiting', () => {
+  it('yields to a hold, because parking one is a decision about your next move', () => {
+    // Reversed deliberately. "Approved, but I am not merging this yet" is a real
+    // state with a real reason to wait, and refusing to park it left the one row
+    // with the best reason to be set aside as the only one that could not be.
     const { approach, holding } = split([
       session({ held: true, prs: [pr({ humanReviewed: true })] }),
     ])
-    expect(approach).toHaveLength(1)
-    expect(holding).toHaveLength(0)
+    expect(holding).toHaveLength(1)
+    expect(approach).toHaveLength(0)
   })
 })
 
@@ -217,6 +220,30 @@ describe('HOLDING', () => {
   it('keeps it past the EN ROUTE window — a hold that expires loses what you parked', () => {
     const { holding } = split([session({ held: true, lastContact: NOW - 1000 * HOUR })])
     expect(holding).toHaveLength(1)
+  })
+
+  it('takes a parked PR row out of APPROACH', () => {
+    // The feature: an approved PR you are not ready to merge.
+    const { holding, approach } = split([
+      session({ held: true, prs: [pr({ humanReviewed: true, status: 'cleared' })] }),
+    ])
+    expect(holding).toHaveLength(1)
+    expect(approach).toHaveLength(0)
+  })
+
+  it('lets a merged PR out of a hold, since there is nothing left to wait for', () => {
+    // LANDED is the one thing a hold does not outrank.
+    const { landed, holding } = split([
+      session({ held: true, prs: [pr({ mergedAt: '2026-08-01T00:00:00Z' })] }),
+    ])
+    expect(landed).toHaveLength(1)
+    expect(holding).toHaveLength(0)
+  })
+
+  it('returns a released row to the board it belongs on', () => {
+    const reviewed = [pr({ humanReviewed: true })]
+    expect(split([session({ held: true, prs: reviewed })]).approach).toHaveLength(0)
+    expect(split([session({ held: false, prs: reviewed })]).approach).toHaveLength(1)
   })
 
   it('keeps it after the process exits, for the same reason', () => {

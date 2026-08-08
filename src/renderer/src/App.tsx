@@ -146,7 +146,7 @@ const EMPTY: Record<Exclude<Board, 'departures'>, { title: string; body: string 
   },
   holding: {
     title: 'NOTHING PARKED',
-    body: 'Sessions you send here leave EN ROUTE without disappearing — no time limit, and they stay even after the terminal closes. Use HOLD on a row to park one.',
+    body: 'Anything you send here is set aside without disappearing — a session you are not working on, or an approved pull request you are not ready to merge. No time limit, and it stays even after the terminal closes. Use HOLD on a row to park one.',
   },
   landed: {
     title: 'NOTHING SHIPPED',

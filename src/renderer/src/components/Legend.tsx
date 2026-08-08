@@ -48,7 +48,7 @@ const BOARDS: [string, string][] = [
   ],
   [
     'HOLDING',
-    'Sessions you parked yourself — the one board Control Tower does not decide. No time limit and no liveness check, so a hold keeps something exactly as long as you want it kept',
+    'Sessions you parked yourself — the one board Control Tower does not decide. Holds a session from EN ROUTE or a pull request from APPROACH you are not ready to merge. No time limit and no liveness check, so it keeps something exactly as long as you want it kept',
   ],
   [
     'EN ROUTE',

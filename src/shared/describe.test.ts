@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { describeApproach, describePr } from './describe.js'
+import { headlinePr } from './types.js'
 import type { PrRef, Session } from './types.js'
 
 /**
@@ -187,5 +188,59 @@ describe('a session with several open PRs', () => {
 
   it('is null when no PR is on approach at all', () => {
     expect(describeApproach(session([pr({ humanReviewed: false })]))).toBeNull()
+  })
+})
+
+describe('a parked PR row', () => {
+  it('keeps its PR headline on HOLDING rather than falling back to the session', () => {
+    // HOLDING is the one mixed board — rows arrive from EN ROUTE with no PR and from
+    // APPROACH with one. Parking a PR row must not cost it the identity you parked
+    // it for.
+    const s = {
+      sessionId: 's',
+      pid: null,
+      cwd: '/tmp',
+      project: 'repo',
+      gitBranch: null,
+      gitDirty: false,
+      summary: 'the session name',
+      summarySource: 'generated' as const,
+      sessionState: null,
+      fallbackName: 'repo',
+      transponder: 'idle' as const,
+      lastContact: 0,
+      startedAt: null,
+      transcriptPath: null,
+      prs: [pr({ number: 12, humanReviewed: true, title: 'The pull request name' })],
+      location: null,
+      unread: false,
+      held: true,
+    }
+    expect(headlinePr(s, 'holding')?.title).toBe('The pull request name')
+    expect(headlinePr(s, 'holding')?.number).toBe(12)
+  })
+
+  it('has no headline on HOLDING when it came from EN ROUTE', () => {
+    const s = {
+      sessionId: 's',
+      pid: null,
+      cwd: '/tmp',
+      project: 'repo',
+      gitBranch: null,
+      gitDirty: false,
+      summary: 'the session name',
+      summarySource: 'generated' as const,
+      sessionState: 'doing a thing',
+      fallbackName: 'repo',
+      transponder: 'idle' as const,
+      lastContact: 0,
+      startedAt: null,
+      transcriptPath: null,
+      prs: [],
+      location: null,
+      unread: false,
+      held: true,
+    }
+    expect(headlinePr(s, 'holding')).toBeNull()
   })
 })

@@ -66,7 +66,7 @@ export function FlightStrip({
    * beats a paraphrase of the conversation that produced it.
    */
   const state =
-    board === 'approach'
+    board === 'approach' || (board === 'holding' && lead)
       ? describeApproach(session)
       : board === 'en-route' || board === 'holding'
         ? session.sessionState
@@ -208,22 +208,27 @@ export function FlightStrip({
         )}
 
         {/*
-          Only on the two boards a session can move between. APPROACH and LANDED are
-          defined by PR state, so parking a row there would either do nothing visible
-          or hide something somebody is waiting on — the control would be a lie either
-          way. Last element of the strip, matching a filed plan's LAUNCH.
+          Everywhere a session can actually be parked or released. APPROACH is
+          included because "approved, but I am not merging this yet" is a real state
+          with a real reason to wait — a release window, a dependency — and it was
+          previously the one row on the board that could not be moved.
+
+          LANDED is not: the work shipped, so there is nothing left to wait for and
+          the control would do nothing visible.
+
+          Last element of the strip, matching a filed plan's LAUNCH.
         */}
-        {(board === 'en-route' || board === 'holding') && (
+        {(board === 'en-route' || board === 'holding' || board === 'approach') && (
           <div className="mt-3">
             <StripAction
-              icon={board === 'en-route' ? PauseCircle : PlayCircle}
-              label={board === 'en-route' ? 'HOLD' : 'RELEASE'}
+              icon={board === 'holding' ? PlayCircle : PauseCircle}
+              label={board === 'holding' ? 'RELEASE' : 'HOLD'}
               title={
-                board === 'en-route'
-                  ? 'Park this on HOLDING — out of EN ROUTE, kept indefinitely'
-                  : 'Send this back to EN ROUTE'
+                board === 'holding'
+                  ? 'Release this — it returns to whichever board it belongs on'
+                  : 'Park this on HOLDING, out of the way and kept indefinitely'
               }
-              onClick={() => void setHeld(session.sessionId, board === 'en-route')}
+              onClick={() => void setHeld(session.sessionId, board !== 'holding')}
             />
           </div>
         )}
