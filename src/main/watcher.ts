@@ -5,6 +5,7 @@ import type { BrowserWindow } from 'electron'
 import type { SessionSnapshot } from '../shared/types.js'
 import { splitByBoard } from '../shared/boards.js'
 import { collect } from './collectors/snapshot.js'
+import * as cache from './store/cache.js'
 import { refresh as refreshGitHub } from './collectors/github.js'
 import Store from 'electron-store'
 import { backend as titlerBackend, run as runTitler } from './titler/index.js'
@@ -118,6 +119,17 @@ function schedule(notify: SnapshotListener): void {
 async function pollGitHub(notify: SnapshotListener): Promise<void> {
   const warnings = await refreshGitHub()
   if (warnings.length > 0) console.warn(warnings.join('; '))
+
+  /**
+   * Between the fetch and the sweep, so a hold that a review has just answered is
+   * already gone by the time the board is rebuilt. Run the other way round and the
+   * released row appears a full poll later, on a change nothing explains.
+   */
+  const released = cache.releaseReviewedHolds()
+  if (released.length > 0) {
+    console.log(`released ${released.length} hold(s) — the PR was reviewed since parking`)
+  }
+
   await sweep(notify)
 }
 

@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { promisify } from 'node:util'
 import type { Advisor, PrStatus, Reviewer } from '../../shared/types.js'
+import { lastHumanReviewAt, type ReviewEvent } from './review-activity.js'
 import * as cache from '../store/cache.js'
 
 const run = promisify(execFile)
@@ -47,11 +48,12 @@ const FRAGMENT = `
 fragment F on PullRequest {
   number title state isDraft reviewDecision mergedAt
   author { login }
-  reviews(first: 100) { nodes { state author { __typename login } } }
+  reviews(first: 100) { nodes { state submittedAt author { __typename login } } }
   reviewThreads(first: 100) {
     nodes {
       isResolved isOutdated
       comments(first: 1) { nodes { author { __typename login } } }
+      latest: comments(last: 1) { nodes { createdAt author { __typename login } } }
     }
   }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
@@ -70,12 +72,15 @@ interface GraphQlPr {
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null
   mergedAt: string | null
   author: { login: string } | null
-  reviews: { nodes: { state: string; author: Author | null }[] }
+  reviews: { nodes: { state: string; submittedAt: string | null; author: Author | null }[] }
   reviewThreads: {
     nodes: {
       isResolved: boolean
       isOutdated: boolean
+      /** The thread's opener, which is who the thread belongs to. */
       comments: { nodes: { author: Author | null }[] }
+      /** Its newest comment, which is when it last moved. */
+      latest: { nodes: { createdAt: string | null; author: Author | null }[] }
     }[]
   }
   commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] }
@@ -236,6 +241,27 @@ export async function refresh(): Promise<string[]> {
         .map((t) => ({ isOutdated: t.isOutdated, login: loginOf(t.comments.nodes[0]?.author) }))
       const reviewers = reviewersOf(pr)
 
+      /**
+       * Every moment somebody could have reviewed this: a posted review, or a comment
+       * on any thread — resolved or not, since resolving one is itself a response.
+       */
+      const events: ReviewEvent[] = [
+        ...pr.reviews.nodes.map((r) => ({
+          at: r.submittedAt,
+          login: r.author?.login,
+          isBot: isBot(r.author),
+        })),
+        ...threads.map((t) => {
+          const newest = t.latest.nodes[0]
+          return {
+            at: newest?.createdAt,
+            login: newest?.author?.login,
+            isBot: isBot(newest?.author),
+          }
+        }),
+      ]
+      const reviewedAt = lastHumanReviewAt(events, pr.author?.login ?? null)
+
       updates.push({
         repository,
         number: pr.number,
@@ -250,6 +276,7 @@ export async function refresh(): Promise<string[]> {
         // Either signal counts: a posted review, or a thread someone opened.
         // #2453 had 25 open human threads while still reading REVIEW_REQUIRED.
         humanReviewed: reviewers.length > 0 || others.length > 0,
+        lastHumanReviewAt: reviewedAt,
         mergedAt: pr.mergedAt,
         fetchedAt: now,
       })

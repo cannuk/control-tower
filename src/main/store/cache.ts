@@ -37,7 +37,7 @@ export function open(): DatabaseSync {
   // Anything expensive to recompute (scan offsets, PR links, generated titles)
   // is never dropped by this.
   db.exec('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)')
-  const PR_STATUS_SCHEMA = 4
+  const PR_STATUS_SCHEMA = 5
   const current = (
     db.prepare("SELECT value FROM schema_meta WHERE key = 'pr_status'").get() as
       { value: number } | undefined
@@ -90,6 +90,10 @@ export function open(): DatabaseSync {
       -- two extra tables would buy queries nothing here ever runs.
       advisors    TEXT NOT NULL DEFAULT '[]',
       reviewers   TEXT NOT NULL DEFAULT '[]',
+      -- Epoch ms of the last review or thread comment by somebody who is neither a
+      -- bot nor the author. Null when nobody else has touched it. This is what
+      -- releases a hold: see releaseReviewedHolds.
+      last_human_review_at INTEGER,
       merged_at   TEXT,
       fetched_at  INTEGER NOT NULL,
       PRIMARY KEY (repository, number)
@@ -233,6 +237,7 @@ export interface StoredPrStatus {
   outdatedAdvisories: number
   advisors: Advisor[]
   reviewers: Reviewer[]
+  lastHumanReviewAt: number | null
   terminal: boolean
   humanReviewed: boolean
   mergedAt: string | null
@@ -290,8 +295,9 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
   const database = open()
   const upsert = database.prepare(
     `INSERT INTO pr_status (repository, number, title, status, advisories, outdated, terminal,
-                            human_reviewed, advisors, reviewers, merged_at, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            human_reviewed, advisors, reviewers, last_human_review_at,
+                            merged_at, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(repository, number) DO UPDATE SET title = excluded.title,
                                                   status = excluded.status,
                                                   advisories = excluded.advisories,
@@ -300,6 +306,7 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
                                                   human_reviewed = excluded.human_reviewed,
                                                   advisors = excluded.advisors,
                                                   reviewers = excluded.reviewers,
+                                                  last_human_review_at = excluded.last_human_review_at,
                                                   merged_at = excluded.merged_at,
                                                   fetched_at = excluded.fetched_at`,
   )
@@ -317,6 +324,7 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
         r.humanReviewed ? 1 : 0,
         JSON.stringify(r.advisors),
         JSON.stringify(r.reviewers),
+        r.lastHumanReviewAt,
         r.mergedAt,
         r.fetchedAt,
       )
@@ -333,7 +341,8 @@ export function prStatuses(): Map<string, StoredPrStatus> {
   const rows = open()
     .prepare(
       `SELECT repository, number, title, status, advisories, outdated, terminal,
-                     human_reviewed, advisors, reviewers, merged_at, fetched_at
+                     human_reviewed, advisors, reviewers, last_human_review_at,
+                     merged_at, fetched_at
               FROM pr_status`,
     )
     .all() as {
@@ -347,6 +356,7 @@ export function prStatuses(): Map<string, StoredPrStatus> {
     human_reviewed: number
     advisors: string | null
     reviewers: string | null
+    last_human_review_at: number | null
     merged_at: string | null
     fetched_at: number
   }[]
@@ -362,6 +372,7 @@ export function prStatuses(): Map<string, StoredPrStatus> {
         outdatedAdvisories: r.outdated,
         advisors: decodeJson<Advisor>(r.advisors),
         reviewers: decodeJson<Reviewer>(r.reviewers),
+        lastHumanReviewAt: r.last_human_review_at,
         terminal: r.terminal === 1,
         humanReviewed: r.human_reviewed === 1,
         mergedAt: r.merged_at,
@@ -574,4 +585,64 @@ export function setHeld(sessionId: string, held: boolean): void {
   } else {
     database.prepare('DELETE FROM session_hold WHERE session_id = ?').run(sessionId)
   }
+}
+
+/**
+ * Release holds whose pull request has been reviewed since it was parked.
+ *
+ * HOLDING carries two kinds of row and this rule only fires on one of them. Park a
+ * session and nothing here touches it — there is no PR, so no review can arrive.
+ * Park a PR because you are waiting for another round, and it comes back the moment
+ * the round lands. Park a PR because you are not ready to merge, and it also comes
+ * back when someone reviews it, which is the correct reading: the state changed
+ * underneath the reason you parked it.
+ *
+ * `held_at` is the whole comparison. A hold records when it was placed, and a PR
+ * records when somebody other than you last reviewed it, so "reviewed since parking"
+ * needs nothing else stored. Activity from before the hold cannot trigger it, which
+ * is what makes parking an already-reviewed PR stick.
+ *
+ * Released rows are also marked unread, so one announces itself rather than
+ * reappearing silently on a board you were not looking at. A review you have not seen
+ * is new activity by any reading of the word.
+ */
+export function releaseReviewedHolds(): string[] {
+  ensureHoldTable()
+  ensureReadTable()
+  const database = open()
+
+  const reviewed = database
+    .prepare(
+      `SELECT DISTINCT h.session_id AS session_id
+         FROM session_hold h
+         JOIN pr_link l ON l.session_id = h.session_id
+         JOIN pr_status s ON s.repository = l.repository AND s.number = l.number
+        WHERE s.last_human_review_at IS NOT NULL
+          AND s.last_human_review_at > h.held_at`,
+    )
+    .all() as { session_id: string }[]
+
+  if (reviewed.length === 0) return []
+
+  const drop = database.prepare('DELETE FROM session_hold WHERE session_id = ?')
+  // read_at = 0 rather than deleting the row: an absent mark means "read" (see
+  // seedRead), so removing it would hide the very thing this is announcing.
+  const unread = database.prepare(
+    `INSERT INTO session_read (session_id, read_at) VALUES (?, 0)
+     ON CONFLICT(session_id) DO UPDATE SET read_at = 0`,
+  )
+
+  database.exec('BEGIN')
+  try {
+    for (const row of reviewed) {
+      drop.run(row.session_id)
+      unread.run(row.session_id)
+    }
+    database.exec('COMMIT')
+  } catch (cause) {
+    database.exec('ROLLBACK')
+    throw cause
+  }
+
+  return reviewed.map((r) => r.session_id)
 }
