@@ -76,10 +76,24 @@ export function heuristicTitle(firstMessage: string | null): string | null {
   const sentence = /^(.{16,}?[.!?])(?:\s|$)/.exec(text)
   if (sentence?.[1]) text = sentence[1]
 
-  text = text
-    .replace(FILLER, '')
-    .replace(/[.!?,\s]+$/, '')
-    .trim()
+  /**
+   * Openers stack, so stripping once is not enough.
+   *
+   * "ok so can you rewrite the parser" is three of them end to end, and a single
+   * anchored replace removed only "ok" — leaving "So can you rewrite the parser" as
+   * the title. Real openings pile up like this constantly; the pattern was right and
+   * applying it once was the mistake.
+   *
+   * Bounded rather than `while`: the regex is anchored and only ever shrinks the
+   * string, but a title generator is not worth risking a spin over.
+   */
+  for (let pass = 0; pass < 5; pass += 1) {
+    const stripped = text.replace(FILLER, '')
+    if (stripped === text) break
+    text = stripped
+  }
+
+  text = text.replace(/[.!?,\s]+$/, '').trim()
   if (text.length < 3) return null
 
   return capitalize(truncateWords(text, 64))

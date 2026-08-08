@@ -144,7 +144,8 @@ function createWindow(): void {
 
   // Anything not our own URL opens in the user's browser, never in-app.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    // Deliberately not awaited: the handler must return its verdict synchronously.
+    void shell.openExternal(url)
     return { action: 'deny' }
   })
 

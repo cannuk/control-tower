@@ -84,6 +84,21 @@ export function detect(): boolean {
  * "send text+Enter to the new workspace", so cmux types it into a shell — argv here
  * only protects the cmux invocation, not the line the shell then parses.
  */
+/**
+ * Wrap arbitrary text as a single POSIX shell word.
+ *
+ * Exported for its tests. This is the only place in the app where text you typed
+ * becomes part of a command line — cmux's `--command` is documented as "send
+ * text+Enter", so a shell parses whatever comes out of here.
+ *
+ * Single quotes suppress every expansion the shell has, and the one character they
+ * cannot contain is handled the only way POSIX allows: close the quote, emit an
+ * escaped quote, reopen. Newlines need nothing special inside single quotes.
+ */
+export function shellQuote(text: string): string {
+  return `'${text.replace(/'/g, `'\\''`)}'`
+}
+
 async function createWorkspace(cwd: string, command: string): Promise<void> {
   const bin = findBinary()
   if (!bin) throw new Error('cmux CLI not found')
@@ -340,7 +355,7 @@ function persistedResumeCommands(): Map<string, string> {
 export async function launch(cwd: string, prompt: string): Promise<TuneResult> {
   if (!detect()) return { ok: false, reason: 'cmux is not installed on this machine' }
 
-  const quoted = `'${prompt.replace(/'/g, `'\\''`)}'`
+  const quoted = shellQuote(prompt)
 
   try {
     await createWorkspace(cwd, `claude ${quoted}`)

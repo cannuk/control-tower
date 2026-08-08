@@ -17,7 +17,10 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "package": "npm run build && electron-builder --mac --dir && npm run package:sign",
-    "package:sign": "codesign --force --deep --sign - dist/mac*/*.app && codesign --verify --deep --strict dist/mac*/*.app"
+    "package:sign": "codesign --force --deep --sign - dist/mac*/*.app && codesign --verify --deep --strict dist/mac*/*.app",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -26,6 +29,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^25.0.0",
     "@types/react": "^19.2.0",
@@ -37,6 +41,8 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.9.0",
     "lucide-react": "^0.552.0",
     "prettier": "^3.7.4",
     "react": "^19.2.0",
@@ -44,7 +50,9 @@
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.8.3",
-    "vite": "^7.2.7"
+    "typescript-eslint": "^8.66.0",
+    "vite": "^7.2.7",
+    "vitest": "^3.2.7"
   },
   "build": {
     "appId": "com.cannuk.control-tower",

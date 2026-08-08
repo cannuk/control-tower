@@ -129,7 +129,7 @@ export async function collect(): Promise<SessionSnapshot> {
   try {
     indexPrLinks(transcripts)
   } catch (cause) {
-    warnings.push(`PR link scan failed: ${cause instanceof Error ? cause.message : cause}`)
+    warnings.push(`PR link scan failed: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
 
   const readMarks = cache.readMarks()
