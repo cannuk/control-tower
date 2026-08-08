@@ -7,6 +7,7 @@ import { readRegistry } from './registry.js'
 import { indexPrLinks, listTranscripts, resolveCwd } from './transcripts.js'
 import { firstUserMessage } from './excerpt.js'
 import { heuristicTitle } from './heuristic-title.js'
+import { inferCwd, prSession, sessionOnBranch } from './orphan-prs.js'
 
 /**
  * Assemble one sweep from the four sources (PLAN.md §2).
@@ -32,6 +33,31 @@ import { heuristicTitle } from './heuristic-title.js'
  * the PR provably exists — the session created it — so dropping it would be a
  * worse lie than admitting the state is unknown.
  */
+const prKey = (repository: string, number: number): string => repository + '#' + number
+
+/** One PR, joined to its last-known status. Shared by the link and discovery paths. */
+function toPrRef(
+  repository: string,
+  number: number,
+  url: string,
+  statuses: Map<string, cache.StoredPrStatus>,
+): PrRef {
+  const known = statuses.get(prKey(repository, number))
+  return {
+    number,
+    url,
+    repository,
+    title: known?.title ?? null,
+    status: (known?.status as PrRef['status']) ?? 'no-contact',
+    advisories: known?.advisories ?? 0,
+    outdatedAdvisories: known?.outdatedAdvisories ?? 0,
+    advisors: known?.advisors ?? [],
+    reviewers: known?.reviewers ?? [],
+    humanReviewed: known?.humanReviewed ?? false,
+    mergedAt: known?.mergedAt ?? null,
+  }
+}
+
 function toPrRefs(
   sessionId: string,
   links: Map<string, cache.StoredPrLink[]>,
@@ -196,6 +222,7 @@ export async function collect(): Promise<SessionSnapshot> {
 
     sessions.push({
       sessionId,
+      origin: 'session',
       pid: entry?.pid ?? null,
       cwd,
       project: basename(cwd),
@@ -236,6 +263,32 @@ export async function collect(): Promise<SessionSnapshot> {
   for (const session of sessions) {
     session.gitBranch = branchOf(session.cwd)
     session.gitDirty = cachedDirty(session.cwd)
+  }
+
+  /**
+   * Reconcile what GitHub says you have open against what the transcripts recorded.
+   *
+   * Runs after branches are resolved, because matching a PR to a session is done on
+   * the branch it is checked out on — the one attachment that is evidence rather
+   * than inference.
+   */
+  const known = new Set(sessions.flatMap((s) => s.prs.map((pr) => prKey(pr.repository, pr.number))))
+  for (const pr of cache.authoredPrs()) {
+    const key = prKey(pr.repository, pr.number)
+    if (known.has(key)) continue
+    if (dismissed.has(key)) continue
+
+    const ref = toPrRef(pr.repository, pr.number, pr.url, prStatuses)
+
+    // A session sitting on the PR's branch is plainly working on it, so the PR joins
+    // that row rather than starting one of its own.
+    const owner = sessionOnBranch(sessions, pr.headRef)
+    if (owner) {
+      owner.prs.push(ref)
+      continue
+    }
+
+    sessions.push(prSession(pr, ref, inferCwd(sessions, pr.repository, pr.headRef)))
   }
 
   return { sessions, sweptAt: Date.now(), warnings }

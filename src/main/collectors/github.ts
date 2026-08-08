@@ -46,7 +46,7 @@ const GH_CANDIDATES = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh
  */
 const FRAGMENT = `
 fragment F on PullRequest {
-  number title state isDraft reviewDecision mergedAt
+  number title state isDraft reviewDecision mergedAt headRefName
   author { login }
   reviews(first: 100) { nodes { state submittedAt author { __typename login } } }
   reviewThreads(first: 100) {
@@ -74,6 +74,7 @@ interface GraphQlPr {
   isDraft: boolean
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null
   mergedAt: string | null
+  headRefName: string | null
   author: { login: string } | null
   reviews: { nodes: { state: string; submittedAt: string | null; author: Author | null }[] }
   reviewThreads: {
@@ -188,6 +189,61 @@ function buildQuery(byRepo: Map<string, number[]>): string {
 }
 
 /**
+ * Ask GitHub which of your pull requests are open.
+ *
+ * The second source of PRs, and the only one that can see a PR no session created.
+ * A separate call rather than part of the batched status query, because that query
+ * is built *from* the set of PRs we already know — it can only refresh what has
+ * already been discovered, never discover anything.
+ *
+ * Failure is a warning, not an error: losing discovery leaves the board on the
+ * link-derived set, which is what it had before this existed.
+ */
+async function discoverAuthored(gh: string): Promise<string[]> {
+  interface SearchResult {
+    number: number
+    url: string
+    updatedAt: string
+    headRefName?: string
+    repository: { nameWithOwner: string }
+  }
+
+  let results: SearchResult[]
+  try {
+    const { stdout } = await run(
+      gh,
+      [
+        'search',
+        'prs',
+        '--author=@me',
+        '--state=open',
+        '--limit=100',
+        '--json',
+        'number,repository,url,updatedAt',
+      ],
+      { timeout: 20_000, maxBuffer: 8 * 1024 * 1024 },
+    )
+    results = JSON.parse(stdout) as SearchResult[]
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    return [`could not list your open PRs: ${detail.split('\n')[0] ?? detail}`]
+  }
+
+  cache.putAuthoredPrs(
+    results.map((r) => ({
+      repository: r.repository.nameWithOwner,
+      number: r.number,
+      url: r.url,
+      // `gh search prs` does not return the branch, so it is filled in by the status
+      // query below, which asks for headRefName on every PR it fetches.
+      headRef: null,
+      updatedAt: Date.parse(r.updatedAt) || Date.now(),
+    })),
+  )
+  return []
+}
+
+/**
  * Refresh every PR that can still change. Returns warnings, never throws — a
  * GitHub outage or a logged-out `gh` should leave the board showing last-known
  * state rather than taking the app down.
@@ -196,8 +252,12 @@ export async function refresh(): Promise<string[]> {
   const gh = findGh()
   if (!gh) return ['gh CLI not found — PR status unavailable']
 
+  // Discovery first, so a PR found this sweep gets its status in the same pass
+  // rather than a minute later.
+  const warnings = await discoverAuthored(gh)
+
   const wanted = cache.prsNeedingRefresh()
-  if (wanted.size === 0) return []
+  if (wanted.size === 0) return warnings
 
   let payload: { data?: Record<string, Record<string, GraphQlPr | null> | null> }
   try {
@@ -211,11 +271,12 @@ export async function refresh(): Promise<string[]> {
     // gh exits non-zero on partial GraphQL errors (e.g. one repo you cannot see)
     // even though the rest of the data is present, so this is a warning, not a
     // failure — the next poll retries.
-    return [`could not read PR status: ${detail.split('\n')[0] ?? detail}`]
+    return [...warnings, `could not read PR status: ${detail.split('\n')[0] ?? detail}`]
   }
 
   const repositories = [...wanted.keys()]
   const updates: cache.StoredPrStatus[] = []
+  const headRefs: { repository: string; number: number; headRef: string }[] = []
   const now = Date.now()
 
   for (const [alias, repoData] of Object.entries(payload.data ?? {})) {
@@ -257,6 +318,10 @@ export async function refresh(): Promise<string[]> {
        * reopening it on GitHub.
        */
       const closedByHuman = pr.closedBy.nodes[0]?.actor?.__typename === 'User'
+      if (pr.headRefName) {
+        headRefs.push({ repository, number: pr.number, headRef: pr.headRefName })
+      }
+
       const reviewers = reviewersOf(pr)
 
       /**
@@ -303,5 +368,6 @@ export async function refresh(): Promise<string[]> {
   }
 
   cache.putPrStatus(updates)
-  return []
+  cache.setAuthoredHeadRefs(headRefs)
+  return warnings
 }

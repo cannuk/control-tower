@@ -13,6 +13,7 @@ import {
 import * as cmux from './providers/cmux.js'
 import { collect } from './collectors/snapshot.js'
 import { readRegistry } from './collectors/registry.js'
+import { parsePrSessionId } from './collectors/orphan-prs.js'
 import * as cacheStore from './store/cache.js'
 import * as staging from './store/staging.js'
 import * as watcher from './watcher.js'
@@ -252,6 +253,40 @@ ipcMain.handle('sessions:snapshot', (): Promise<SessionSnapshot> => collect())
 ipcMain.handle('session:tune', async (_e, sessionId: string, cwd: string): Promise<TuneResult> => {
   if (typeof sessionId !== 'string' || sessionId.length === 0) {
     return { ok: false, reason: 'no session id' }
+  }
+
+  /**
+   * A pull request with no session behind it starts one.
+   *
+   * The same launch DEPARTURES uses: a workspace at the checkout, running `claude`
+   * with the PR named in its opening prompt. Git is deliberately untouched — the
+   * branch goes in the prompt rather than being checked out here, because switching
+   * branches under a directory that may hold uncommitted work is not something a
+   * dashboard should do on a click.
+   */
+  const asPr = parsePrSessionId(sessionId)
+  if (asPr) {
+    if (typeof cwd !== 'string' || cwd.length === 0) {
+      return {
+        ok: false,
+        reason: 'no local checkout found for this repository — open it once from a session first',
+      }
+    }
+    const status = cacheStore.prStatuses().get(`${asPr.repository}#${asPr.number}`)
+    const branch = cacheStore
+      .authoredPrs()
+      .find((p) => p.repository === asPr.repository && p.number === asPr.number)?.headRef
+    const prompt = [
+      `Pick up work on pull request #${asPr.number} in ${asPr.repository}.`,
+      status?.title ? `Title: ${status.title}` : null,
+      branch ? `Branch: ${branch}` : null,
+      `https://github.com/${asPr.repository}/pull/${asPr.number}`,
+      '',
+      'Start by checking out the branch and reading the PR.',
+    ]
+      .filter((line) => line !== null)
+      .join('\n')
+    return cmux.launch(cwd, prompt)
   }
 
   /**

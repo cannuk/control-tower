@@ -159,18 +159,28 @@ export function FlightStrip({
         {/* The other identity. Labelled so it is never ambiguous which is which,
             and kept even when the two texts echo each other: the session name is
             the handle for the tune action, and the PR is what others see. */}
-        {lead && (
-          <Subtitle
-            label="SESSION"
-            text={sessionName}
-            dim={sessionDim(session.transponder)}
-            title={
-              sessionDim(session.transponder)
-                ? 'No terminal is running this session — opening it resumes from the transcript'
-                : undefined
-            }
-          />
-        )}
+        {lead &&
+          (session.origin === 'pull-request' ? (
+            /* No session ever existed for this one — GitHub told us about it, not a
+               transcript. Says what clicking does, since "resume" would be a lie. */
+            <Subtitle
+              label="SESSION"
+              text="none — click the title to start one"
+              dim
+              title={`No Claude session created this PR. Opening it starts one in ${session.cwd || 'a directory you choose'}.`}
+            />
+          ) : (
+            <Subtitle
+              label="SESSION"
+              text={sessionName}
+              dim={sessionDim(session.transponder)}
+              title={
+                sessionDim(session.transponder)
+                  ? 'No terminal is running this session — opening it resumes from the transcript'
+                  : undefined
+              }
+            />
+          ))}
         {trailingPr && (
           <Subtitle
             label={`PR ${trailingPr.number}`}
@@ -218,20 +228,21 @@ export function FlightStrip({
 
           Last element of the strip, matching a filed plan's LAUNCH.
         */}
-        {(board === 'en-route' || board === 'holding' || board === 'approach') && (
-          <div className="mt-3">
-            <StripAction
-              icon={board === 'holding' ? PlayCircle : PauseCircle}
-              label={board === 'holding' ? 'RELEASE' : 'HOLD'}
-              title={
-                board === 'holding'
-                  ? 'Release this — it returns to whichever board it belongs on'
-                  : 'Park this on HOLDING, out of the way and kept indefinitely'
-              }
-              onClick={() => void setHeld(session.sessionId, board !== 'holding')}
-            />
-          </div>
-        )}
+        {session.origin === 'session' &&
+          (board === 'en-route' || board === 'holding' || board === 'approach') && (
+            <div className="mt-3">
+              <StripAction
+                icon={board === 'holding' ? PlayCircle : PauseCircle}
+                label={board === 'holding' ? 'RELEASE' : 'HOLD'}
+                title={
+                  board === 'holding'
+                    ? 'Release this — it returns to whichever board it belongs on'
+                    : 'Park this on HOLDING, out of the way and kept indefinitely'
+                }
+                onClick={() => void setHeld(session.sessionId, board !== 'holding')}
+              />
+            </div>
+          )}
 
         {session.prs.length > 0 && (
           // Flights get their own line. Mixed in with origin and branch they read

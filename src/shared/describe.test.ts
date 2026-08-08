@@ -154,6 +154,7 @@ describe('a session with several open PRs', () => {
   function session(prs: PrRef[]): Session {
     return {
       sessionId: 's',
+      origin: 'session' as const,
       pid: null,
       cwd: '/tmp',
       project: 'repo',
@@ -208,6 +209,7 @@ describe('a parked PR row', () => {
     // it for.
     const s = {
       sessionId: 's',
+      origin: 'session' as const,
       pid: null,
       cwd: '/tmp',
       project: 'repo',
@@ -233,6 +235,7 @@ describe('a parked PR row', () => {
   it('has no headline on HOLDING when it came from EN ROUTE', () => {
     const s = {
       sessionId: 's',
+      origin: 'session' as const,
       pid: null,
       cwd: '/tmp',
       project: 'repo',

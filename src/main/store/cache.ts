@@ -269,19 +269,28 @@ function decodeJson<T>(raw: string | null): T[] {
 const PR_STATUS_TTL_MS = 60_000
 
 /**
- * PRs worth asking GitHub about: everything linked, minus settled ones, minus
- * those refreshed within the TTL. Grouped by repository so the caller can build
- * one aliased query.
+ * PRs worth asking GitHub about: everything linked *or* authored, minus settled
+ * ones, minus those refreshed within the TTL. Grouped by repository so the caller
+ * can build one aliased query.
+ *
+ * The union matters: a PR discovered from GitHub has no link, and without it here
+ * it would be known to exist and never have a status, so it would render as a row
+ * with no chip and no sentence.
  */
 export function prsNeedingRefresh(now = Date.now()): Map<string, number[]> {
+  ensureAuthoredTable()
   const rows = open()
     .prepare(
-      `SELECT DISTINCT l.repository AS repository, l.number AS number
-       FROM pr_link l
-       LEFT JOIN pr_status s ON s.repository = l.repository AND s.number = l.number
+      `SELECT DISTINCT k.repository AS repository, k.number AS number
+       FROM (
+         SELECT repository, number FROM pr_link
+         UNION
+         SELECT repository, number FROM authored_pr
+       ) k
+       LEFT JOIN pr_status s ON s.repository = k.repository AND s.number = k.number
        WHERE s.number IS NULL
           OR (s.terminal = 0 AND s.fetched_at < ?)
-       ORDER BY l.repository, l.number`,
+       ORDER BY k.repository, k.number`,
     )
     .all(now - PR_STATUS_TTL_MS) as { repository: string; number: number }[]
 
@@ -700,5 +709,108 @@ export function setPrDismissed(repository: string, number: number, dismissed: bo
     database
       .prepare('DELETE FROM dismissed_pr WHERE repository = ? AND number = ?')
       .run(repository, number)
+  }
+}
+
+/**
+ * Open pull requests you authored, as GitHub reports them.
+ *
+ * The board's knowledge of PRs came entirely from `pr-link` records, which Claude
+ * Code writes only when it creates the PR itself. Anything opened another way — the
+ * GitHub UI, a plain terminal, a session whose transcript has since gone — was
+ * invisible by construction. #2493 sat open for sixteen days that way, mentioned in
+ * thirty transcripts and recorded in none.
+ *
+ * So this is the second source: asked of GitHub directly, and reconciled against the
+ * links in `collect`. Rows here are not a cache of `pr_link` — they overlap heavily
+ * and neither contains the other.
+ */
+function ensureAuthoredTable(): void {
+  open().exec(`
+    CREATE TABLE IF NOT EXISTS authored_pr (
+      repository  TEXT NOT NULL,
+      number      INTEGER NOT NULL,
+      url         TEXT NOT NULL,
+      head_ref    TEXT,
+      updated_at  INTEGER NOT NULL,
+      PRIMARY KEY (repository, number)
+    );
+  `)
+}
+
+export interface AuthoredPr {
+  repository: string
+  number: number
+  url: string
+  /** The PR's branch, which is how a session gets matched to it without a link. */
+  headRef: string | null
+  updatedAt: number
+}
+
+export function authoredPrs(): AuthoredPr[] {
+  ensureAuthoredTable()
+  const rows = open()
+    .prepare('SELECT repository, number, url, head_ref, updated_at FROM authored_pr')
+    .all() as {
+    repository: string
+    number: number
+    url: string
+    head_ref: string | null
+    updated_at: number
+  }[]
+  return rows.map((r) => ({
+    repository: r.repository,
+    number: r.number,
+    url: r.url,
+    headRef: r.head_ref,
+    updatedAt: r.updated_at,
+  }))
+}
+
+/**
+ * Replace the set wholesale.
+ *
+ * A PR that has merged or closed since the last query simply stops appearing in the
+ * answer, and an upsert would leave it behind forever. The query is the truth about
+ * what is open, so the table mirrors it exactly.
+ */
+export function putAuthoredPrs(prs: AuthoredPr[]): void {
+  ensureAuthoredTable()
+  const database = open()
+  const insert = database.prepare(
+    `INSERT INTO authored_pr (repository, number, url, head_ref, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(repository, number) DO UPDATE SET url = excluded.url,
+                                                   head_ref = excluded.head_ref,
+                                                   updated_at = excluded.updated_at`,
+  )
+  database.exec('BEGIN')
+  try {
+    database.exec('DELETE FROM authored_pr')
+    for (const pr of prs) insert.run(pr.repository, pr.number, pr.url, pr.headRef, pr.updatedAt)
+    database.exec('COMMIT')
+  } catch (cause) {
+    database.exec('ROLLBACK')
+    throw cause
+  }
+}
+
+/** Fill in branches for authored PRs, which the search API does not return. */
+export function setAuthoredHeadRefs(
+  refs: { repository: string; number: number; headRef: string }[],
+): void {
+  if (refs.length === 0) return
+  ensureAuthoredTable()
+  const database = open()
+  const update = database.prepare(
+    'UPDATE authored_pr SET head_ref = ? WHERE repository = ? AND number = ?',
+  )
+  database.exec('BEGIN')
+  try {
+    for (const r of refs) update.run(r.headRef, r.repository, r.number)
+    database.exec('COMMIT')
+  } catch (cause) {
+    database.exec('ROLLBACK')
+    throw cause
   }
 }

@@ -36,6 +36,7 @@ function pr(over: Partial<PrRef> = {}): PrRef {
 function session(over: Partial<Session> = {}): Session {
   return {
     sessionId: 'aaaaaaaa-0000-0000-0000-000000000000',
+    origin: 'session' as const,
     pid: 1,
     cwd: '/tmp/repo',
     project: 'repo',
@@ -185,11 +186,13 @@ describe('LANDED', () => {
   it('orders by merge time, not by last contact', () => {
     const older = session({
       sessionId: 'old',
+      origin: 'session' as const,
       lastContact: NOW - 1000,
       prs: [pr({ number: 1, mergedAt: '2026-08-05T00:00:00Z' })],
     })
     const newer = session({
       sessionId: 'new',
+      origin: 'session' as const,
       lastContact: NOW - 10 * HOUR,
       prs: [pr({ number: 2, mergedAt: '2026-08-09T00:00:00Z' })],
     })
@@ -203,11 +206,13 @@ describe('one row per pull request', () => {
     // same title twice with the same review paragraph under it.
     const build = session({
       sessionId: 'build',
+      origin: 'session' as const,
       lastContact: NOW - 10 * HOUR,
       prs: [pr({ humanReviewed: true })],
     })
     const feedback = session({
       sessionId: 'feedback',
+      origin: 'session' as const,
       lastContact: NOW - 1000,
       prs: [pr({ humanReviewed: true })],
     })

@@ -139,6 +139,17 @@ export interface SessionLocation {
 
 export interface Session {
   sessionId: string
+  /**
+   * What this row actually is.
+   *
+   * Almost every row is a Claude session. A few are pull requests GitHub told us
+   * about that no session accounts for — opened by hand, or by a session whose
+   * transcript is gone. They are modelled as sessions so the boards, the headline
+   * rules and the review paragraph all apply unchanged; this is what the tune
+   * handler branches on, since clicking one has to start a session rather than
+   * find one.
+   */
+  origin: 'session' | 'pull-request'
   pid: number | null
   cwd: string
   /** Repo-leaf of cwd. The flight's origin field. */
