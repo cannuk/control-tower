@@ -136,9 +136,17 @@ describe('threads', () => {
     ).toContain('All of them sit on outdated code')
   })
 
-  it('claims nothing was resolved when nothing was ever reviewed', () => {
-    // "Nothing left to resolve" implies there had been something.
-    expect(describePr(pr({ status: 'inbound' }))).toBeNull()
+  it('says nobody has looked rather than claiming nothing was resolved', () => {
+    // "Nothing left to resolve" implies there had been something. These rows reach
+    // APPROACH with no review and no threads, and silence there is indistinguishable
+    // from having failed to load anything.
+    expect(describePr(pr({ status: 'inbound' }))).toBe('Nobody has looked at this yet.')
+  })
+
+  it('still mentions CI on a PR nobody has looked at', () => {
+    expect(describePr(pr({ status: 'go-around' }))).toBe(
+      'Nobody has looked at this yet. CI failing.',
+    )
   })
 })
 
@@ -167,13 +175,14 @@ describe('a session with several open PRs', () => {
   }
 
   it('names the siblings, so the row does not look further along than it is', () => {
+    // The newest unmerged PR leads, so #9 is described and #7 is the sibling.
     const text = describeApproach(
       session([
         pr({ number: 7, humanReviewed: true, reviewers: [{ login: 'ada', stance: 'approved' }] }),
         pr({ number: 9, humanReviewed: false }),
       ]),
     )
-    expect(text).toContain('Also open: #9')
+    expect(text).toContain('Also open: #7')
   })
 
   it('describes the highest-numbered reviewed PR, which is the current work', () => {
@@ -186,8 +195,9 @@ describe('a session with several open PRs', () => {
     expect(text).toContain('Approved by new')
   })
 
-  it('is null when no PR is on approach at all', () => {
-    expect(describeApproach(session([pr({ humanReviewed: false })]))).toBeNull()
+  it('is null when every PR has merged', () => {
+    // Nothing is on approach once it has landed, so there is no sentence to compose.
+    expect(describeApproach(session([pr({ mergedAt: '2026-08-01T00:00:00Z' })]))).toBeNull()
   })
 })
 
@@ -242,5 +252,33 @@ describe('a parked PR row', () => {
       held: true,
     }
     expect(headlinePr(s, 'holding')).toBeNull()
+  })
+})
+
+describe('a closed pull request', () => {
+  it('says how it ended and how to undo it', () => {
+    // Every closed PR that reaches the renderer was closed by a bot — the ones you
+    // closed yourself are filtered upstream — so all of them are revivable.
+    expect(describePr(pr({ status: 'diverted' }))).toBe(
+      'Closed without merging. Reopen it on GitHub to bring it back.',
+    )
+  })
+
+  it('says it even when the closed PR had review activity', () => {
+    expect(
+      describePr(
+        pr({
+          status: 'diverted',
+          advisories: 3,
+          reviewers: [{ login: 'ada', stance: 'commented' }],
+        }),
+      ),
+    ).toContain('Closed without merging')
+  })
+
+  it('does not claim a merged PR was closed', () => {
+    expect(describePr(pr({ status: 'landed', mergedAt: '2026-08-01T00:00:00Z' }))).not.toContain(
+      'Closed',
+    )
   })
 })

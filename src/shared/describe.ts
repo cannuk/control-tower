@@ -126,6 +126,31 @@ function outdatedClause(advisories: number, advisors: Advisor[]): string | null 
  */
 export function describePr(pr: PrRef): string | null {
   const hadReview = pr.reviewers.length > 0
+
+  /**
+   * A closed PR says how it ended and how to undo it.
+   *
+   * Only bot closures reach the renderer — anything you closed yourself is filtered
+   * out upstream — so every one of these is revivable, and the way to revive it is
+   * on GitHub rather than in here. Said without naming the closer, because that
+   * invariant lives in another module and a sentence should not depend on it.
+   */
+  if (!isOpen(pr) && pr.mergedAt === null) {
+    return 'Closed without merging. Reopen it on GitHub to bring it back.'
+  }
+
+  /**
+   * Say so when nobody has looked yet.
+   *
+   * These rows only reach APPROACH because the board stopped requiring a review, and
+   * without this they arrive with a title, a chip and nothing else — the one state
+   * where silence is indistinguishable from "we failed to load anything".
+   */
+  if (!hadReview && pr.advisories === 0) {
+    const ci = ciClause(pr.status)
+    return ci ? `Nobody has looked at this yet. ${ci}.` : 'Nobody has looked at this yet.'
+  }
+
   const clauses = [
     stanceClause(pr.reviewers),
     ciClause(pr.status),

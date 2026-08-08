@@ -138,11 +138,11 @@ export function App(): React.JSX.Element {
 const EMPTY: Record<Exclude<Board, 'departures'>, { title: string; body: string }> = {
   approach: {
     title: 'NOBODY WAITING',
-    body: 'No unmerged PR has been reviewed or commented on by a human. Nothing needs a decision from you right now.',
+    body: 'Nothing has an open pull request. Everything is either still being worked, parked, or already merged.',
   },
   'en-route': {
     title: 'NOTHING IN THE AIR',
-    body: 'No running session touched in the last 8 hours that is still waiting on its first human review.',
+    body: 'No running session touched in the last 8 hours without a pull request open. Anything that has one is on APPROACH.',
   },
   holding: {
     title: 'NOTHING PARKED',

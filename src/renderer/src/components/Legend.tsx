@@ -52,11 +52,11 @@ const BOARDS: [string, string][] = [
   ],
   [
     'EN ROUTE',
-    'A running session touched in the last 8 hours, with no PR yet or no human review yet. An exited session is not in flight, however recently you left it. CodeRabbit does not count as a reviewer',
+    'A running session touched in the last 8 hours that has no pull request yet. Opening one moves the work to APPROACH. An exited session is not in flight, however recently you left it',
   ],
   [
     'APPROACH',
-    'An unmerged PR a human has reviewed or commented on — feedback to address, or an approval with comments worth reading first',
+    'Any pull request that has not merged — awaiting its first look, mid-review, or approved with comments worth reading. Independent of whether its session is still running, because the PR is the live thing. CodeRabbit never counts as a reviewer in the counts or the summary',
   ],
   [
     'LANDED',

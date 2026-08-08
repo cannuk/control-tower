@@ -54,13 +54,13 @@ export function Tabs({
       id: 'en-route',
       label: 'EN ROUTE',
       count: counts['en-route'],
-      title: 'Still running and being worked — no PR yet, or no human has reviewed it',
+      title: 'Still running and being worked, with no pull request open yet',
     },
     {
       id: 'approach',
       label: 'APPROACH',
       count: counts.approach,
-      title: 'On approach — unmerged PR that a human has reviewed or commented on',
+      title: 'On approach — every pull request that has not merged yet',
     },
     { id: 'landed', label: 'LANDED', count: counts.landed, title: 'Recently merged' },
   ]

@@ -221,21 +221,27 @@ export type Board = 'departures' | 'holding' | 'en-route' | 'approach' | 'landed
 export const BOARDS: Board[] = ['departures', 'holding', 'en-route', 'approach', 'landed']
 
 /**
- * This PR is on approach: still flying, and a human has been in the loop.
+ * This PR is on approach: it exists and it has not landed.
  *
- * Covers both shapes that block a merge — changes you need to address, and an
- * approval carrying non-blocking comments you still want to read before merging.
- * Both mean the PR is close to the ground and needs a decision from you.
+ * Deliberately just "not merged". Requiring human review first looked right — the
+ * board was for things somebody is waiting on you about — and it left a hole big
+ * enough to lose work in. A PR nobody has reviewed sits on no board at all:
+ * APPROACH turned it away for lack of a review, EN ROUTE dropped it once the
+ * terminal closed or eight hours passed, LANDED wants a merge. Four open PRs on a
+ * real board were invisible that way, two of them for nine days — precisely the ones
+ * most likely to be forgotten, since nobody had looked at them yet.
  *
- * Closed PRs stay. A closed-with-comments PR is unmerged and reviewed, so it lands
- * here, and that was briefly "fixed" on the reasoning that a closed PR needs no
- * decision. It was not a bug: a PR closed for staleness is often one you mean to
- * revive, and the row is the thread back to the session that built it. Which closed
- * PRs are finished business is a judgement only you can make, so it is made by
- * dismissing them one at a time rather than by a rule that hides them all.
+ * The wider rule also reads better as a pipeline: EN ROUTE is work in flight,
+ * APPROACH is work that has opened a PR and begun its descent, LANDED is merged.
+ * Whether anyone has reviewed it is a fact about the row, not about which board it
+ * belongs on — the chip and the sentence carry that.
+ *
+ * Closed PRs stay, which the same "not merged" test gives for free. A PR closed for
+ * staleness is often one you mean to revive; which of those are finished business is
+ * a judgement made by dismissing them one at a time.
  */
 export function onApproach(pr: PrRef): boolean {
-  return pr.mergedAt === null && pr.humanReviewed
+  return pr.mergedAt === null
 }
 
 /**

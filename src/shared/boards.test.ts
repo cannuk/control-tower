@@ -88,12 +88,26 @@ describe('APPROACH', () => {
     expect(enRoute).toHaveLength(0)
   })
 
-  it('ignores a PR only a bot has touched', () => {
-    // humanReviewed is computed upstream with bots and the author excluded; the board
-    // must not second-guess it by treating any PR as review activity.
+  it('takes a PR nobody has reviewed yet', () => {
+    // The hole this closed. Requiring a review left an unreviewed PR on no board at
+    // all — APPROACH refused it, EN ROUTE dropped it once its session went quiet.
+    // Four real PRs were invisible that way, two of them for nine days.
     const { approach, enRoute } = split([session({ prs: [pr({ humanReviewed: false })] })])
-    expect(approach).toHaveLength(0)
-    expect(enRoute).toHaveLength(1)
+    expect(approach).toHaveLength(1)
+    expect(enRoute).toHaveLength(0)
+  })
+
+  it('keeps an unreviewed PR even after its session dies and ages out', () => {
+    // The exact shape of the lost rows: work finished days ago, terminal closed,
+    // nobody has looked. The PR is the live thing, not the session.
+    const { approach } = split([
+      session({
+        transponder: 'no-contact',
+        lastContact: NOW - 200 * HOUR,
+        prs: [pr({ humanReviewed: false })],
+      }),
+    ])
+    expect(approach).toHaveLength(1)
   })
 
   it('outranks a merged sibling', () => {
@@ -140,7 +154,7 @@ describe('LANDED', () => {
   it('never takes a session that still has an open PR', () => {
     // Found on the live board: two merged PRs and one open-but-unreviewed filed the
     // whole session under "shipped".
-    const { landed, enRoute } = split([
+    const { landed, enRoute, approach } = split([
       session({
         prs: [
           pr({ number: 1, mergedAt: '2026-08-01T00:00:00Z' }),
@@ -150,7 +164,10 @@ describe('LANDED', () => {
       }),
     ])
     expect(landed).toHaveLength(0)
-    expect(enRoute).toHaveLength(1)
+    // Lands on APPROACH now rather than EN ROUTE: the open sibling is unmerged, and
+    // that alone is what APPROACH means.
+    expect(enRoute).toHaveLength(0)
+    expect(approach).toHaveLength(1)
   })
 
   it('does not count a closed PR as still open', () => {
@@ -210,12 +227,11 @@ describe('one row per pull request', () => {
     expect(collapsed.landed).toBe(2)
   })
 
-  it('leaves EN ROUTE alone — two sessions toward one PR are two things happening', () => {
-    const un = { humanReviewed: false }
-    const { enRoute } = split([
-      session({ sessionId: 'a', prs: [pr(un)] }),
-      session({ sessionId: 'b', prs: [pr(un)] }),
-    ])
+  it('leaves EN ROUTE alone', () => {
+    // EN ROUTE now only ever holds sessions with no unmerged PR, so there is no
+    // shared key left to collapse on — two sessions there are always two rows.
+    // Kept as a guard against oneRowPerPr ever being pointed at this board.
+    const { enRoute } = split([session({ sessionId: 'a' }), session({ sessionId: 'b' })])
     expect(enRoute).toHaveLength(2)
   })
 })
