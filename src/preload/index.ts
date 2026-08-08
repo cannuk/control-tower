@@ -21,6 +21,8 @@ const api = {
     ipcRenderer.invoke('session:markRead', sessionId, at),
   setHeld: (sessionId: string, held: boolean): Promise<void> =>
     ipcRenderer.invoke('session:setHeld', sessionId, held),
+  dismissPr: (repository: string, number: number, dismissed: boolean): Promise<void> =>
+    ipcRenderer.invoke('pr:setDismissed', repository, number, dismissed),
 
   /**
    * Subscribe to pushed sweeps. Returns an unsubscribe function — without one,

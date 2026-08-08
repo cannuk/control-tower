@@ -55,6 +55,7 @@ interface State {
   removeDeparture: (id: number) => Promise<void>
   moveDeparture: (id: number, index: number) => Promise<void>
   setHeld: (sessionId: string, held: boolean) => Promise<void>
+  dismissPr: (repository: string, number: number) => Promise<void>
   markRead: (sessionId: string, at: number) => Promise<void>
   launchDeparture: (id: number) => Promise<string | null>
   bumpTick: () => void
@@ -233,6 +234,29 @@ export const useStore = create<State>((set, get) => ({
       })
     }
     await window.controlTower.markRead(sessionId, at)
+  },
+
+  /**
+   * Hide a closed pull request everywhere.
+   *
+   * Removed locally first, because a chip that lingers until the next sweep reads as
+   * a click that missed. The sweep that follows makes it permanent.
+   */
+  dismissPr: async (repository, number) => {
+    const snapshot = get().snapshot
+    if (snapshot) {
+      set({
+        snapshot: {
+          ...snapshot,
+          sessions: snapshot.sessions.map((s) => ({
+            ...s,
+            prs: s.prs.filter((p) => !(p.repository === repository && p.number === number)),
+          })),
+        },
+      })
+    }
+    await window.controlTower.dismissPr(repository, number, true)
+    await get().refresh(false)
   },
 
   bumpTick: () => set((s) => ({ tick: s.tick + 1 })),

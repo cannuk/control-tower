@@ -379,6 +379,11 @@ ipcMain.handle('session:markRead', (_e, sessionId: string, at: number) => {
   cacheStore.markRead(sessionId, at)
 })
 
+ipcMain.handle('pr:setDismissed', (_e, repository: string, number: number, dismissed: boolean) => {
+  if (typeof repository !== 'string' || !Number.isInteger(number)) return
+  cacheStore.setPrDismissed(repository, number, Boolean(dismissed))
+})
+
 ipcMain.handle('session:setHeld', (_e, sessionId: string, held: boolean) => {
   if (typeof sessionId !== 'string' || sessionId.length === 0) return
   cacheStore.setHeld(sessionId, Boolean(held))

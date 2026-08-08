@@ -36,23 +36,48 @@ function toPrRefs(
   sessionId: string,
   links: Map<string, cache.StoredPrLink[]>,
   statuses: Map<string, cache.StoredPrStatus>,
+  dismissed: Set<string>,
 ): PrRef[] {
-  return (links.get(sessionId) ?? []).map((link) => {
-    const known = statuses.get(link.repository + '#' + link.number)
-    return {
-      number: link.number,
-      url: link.url,
-      repository: link.repository,
-      title: known?.title ?? null,
-      status: (known?.status as PrRef['status']) ?? 'no-contact',
-      advisories: known?.advisories ?? 0,
-      outdatedAdvisories: known?.outdatedAdvisories ?? 0,
-      advisors: known?.advisors ?? [],
-      reviewers: known?.reviewers ?? [],
-      humanReviewed: known?.humanReviewed ?? false,
-      mergedAt: known?.mergedAt ?? null,
-    }
-  })
+  return (links.get(sessionId) ?? [])
+    .filter((link) => {
+      const known = statuses.get(link.repository + '#' + link.number)
+      const isClosed = known?.status === 'diverted'
+
+      /**
+       * A PR you closed yourself is finished business and leaves the board.
+       *
+       * One a stale bot closed stays: those are the ones worth reviving, and the row
+       * is the thread back to the session that built it. This is the whole of the
+       * distinction — a rule rather than a chore, because the answer is already
+       * recorded on the PR.
+       */
+      if (isClosed && known?.closedByHuman) return false
+
+      /**
+       * Dismissal is the manual override, for a bot-closed PR you have decided
+       * against. It only holds while the PR is still closed, so reopening one on
+       * GitHub brings it back — the revival happens where the PR lives and the board
+       * follows, which is why there is no list of hidden things to un-hide from.
+       */
+      if (!dismissed.has(link.repository + '#' + link.number)) return true
+      return !isClosed
+    })
+    .map((link) => {
+      const known = statuses.get(link.repository + '#' + link.number)
+      return {
+        number: link.number,
+        url: link.url,
+        repository: link.repository,
+        title: known?.title ?? null,
+        status: (known?.status as PrRef['status']) ?? 'no-contact',
+        advisories: known?.advisories ?? 0,
+        outdatedAdvisories: known?.outdatedAdvisories ?? 0,
+        advisors: known?.advisors ?? [],
+        reviewers: known?.reviewers ?? [],
+        humanReviewed: known?.humanReviewed ?? false,
+        mergedAt: known?.mergedAt ?? null,
+      }
+    })
 }
 
 /**
@@ -134,6 +159,7 @@ export async function collect(): Promise<SessionSnapshot> {
 
   const readMarks = cache.readMarks()
   const held = cache.heldSessions()
+  const dismissed = cache.dismissedPrs()
   const prLinks = cache.prLinksBySession()
   const prStatuses = cache.prStatuses()
   const providerTitles = cmux.titles()
@@ -182,7 +208,7 @@ export async function collect(): Promise<SessionSnapshot> {
       lastContact: info.mtimeMs,
       startedAt: entry?.startedAt ?? null,
       transcriptPath: info.path,
-      prs: toPrRefs(sessionId, prLinks, prStatuses),
+      prs: toPrRefs(sessionId, prLinks, prStatuses, dismissed),
       // Resolved at click time by the provider (see cmux.focus), so this only
       // records whether tuning is plausible at all.
       location: entry ? { providerId: 'cmux', handle: sessionId, exact: true } : null,

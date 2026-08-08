@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GitBranch, MapPin, PauseCircle, PlayCircle, TriangleAlert } from 'lucide-react'
+import { GitBranch, MapPin, PauseCircle, PlayCircle, TriangleAlert, X } from 'lucide-react'
 import { describeApproach } from '../../../shared/describe.js'
 import { headlinePr, squawk, type Board, type PrRef, type Session } from '../../../shared/types.js'
 import { dotFor, sessionDim } from '../lib/status.js'
@@ -38,7 +38,7 @@ export function FlightStrip({
   board: Board
 }): React.JSX.Element {
   const dot = dotFor(session.transponder, session.unread)
-  const { setHeld, markRead } = useStore()
+  const { setHeld, markRead, dismissPr } = useStore()
   const [tuneError, setTuneError] = useState<string | null>(null)
 
   const lead = headlinePr(session, board)
@@ -241,7 +241,26 @@ export function FlightStrip({
             {[...session.prs]
               .sort((a, b) => (a.number === lead?.number ? -1 : b.number === lead?.number ? 1 : 0))
               .map((prRef) => (
-                <StatusChip key={prRef.number} prRef={prRef} />
+                <span key={prRef.number} className="inline-flex items-center gap-1.5">
+                  <StatusChip prRef={prRef} />
+                  {/*
+                    Only on a closed PR that a bot closed — the ones you closed
+                    yourself have already left the board. This is the override for
+                    "the stale bot got this one and it is genuinely dead".
+
+                    Uses the same control every other row action uses. It was a bare
+                    11px × first, which read as decoration next to a chip rather than
+                    as something to press.
+                  */}
+                  {prRef.status === 'diverted' && (
+                    <StripAction
+                      icon={X}
+                      label="DISMISS"
+                      title={`Hide #${prRef.number} from every board. Reopening it on GitHub brings it back.`}
+                      onClick={() => void dismissPr(prRef.repository, prRef.number)}
+                    />
+                  )}
+                </span>
               ))}
           </div>
         )}

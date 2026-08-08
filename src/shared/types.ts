@@ -226,6 +226,13 @@ export const BOARDS: Board[] = ['departures', 'holding', 'en-route', 'approach',
  * Covers both shapes that block a merge — changes you need to address, and an
  * approval carrying non-blocking comments you still want to read before merging.
  * Both mean the PR is close to the ground and needs a decision from you.
+ *
+ * Closed PRs stay. A closed-with-comments PR is unmerged and reviewed, so it lands
+ * here, and that was briefly "fixed" on the reasoning that a closed PR needs no
+ * decision. It was not a bug: a PR closed for staleness is often one you mean to
+ * revive, and the row is the thread back to the session that built it. Which closed
+ * PRs are finished business is a judgement only you can make, so it is made by
+ * dismissing them one at a time rather than by a rule that hides them all.
  */
 export function onApproach(pr: PrRef): boolean {
   return pr.mergedAt === null && pr.humanReviewed

@@ -73,6 +73,10 @@ const MARKINGS: [string, string][] = [
   ['Tune', 'Click a description to bring that session’s terminal to the front'],
   ['Offset dot', 'New activity only — see THE DOT below'],
   [
+    'Closed PRs',
+    'Only ones a bot closed are shown — those are the ones worth reviving. Anything you closed yourself has already left the board, and DISMISS hides a bot-closed one you have decided against',
+  ],
+  [
     'Dimmed session',
     'The session name faded on APPROACH or LANDED means no terminal is running it; opening resumes from the transcript',
   ],

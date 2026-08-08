@@ -57,6 +57,9 @@ fragment F on PullRequest {
     }
   }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  closedBy: timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+    nodes { ... on ClosedEvent { actor { __typename } } }
+  }
 }`
 
 interface Author {
@@ -84,6 +87,7 @@ interface GraphQlPr {
     }[]
   }
   commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] }
+  closedBy: { nodes: { actor?: Author | null }[] }
 }
 
 /** A null author is a deleted account — treat as human, not as a bot. */
@@ -239,6 +243,20 @@ export async function refresh(): Promise<string[]> {
       const unresolved = others
         .filter((t) => !t.isResolved)
         .map((t) => ({ isOutdated: t.isOutdated, login: loginOf(t.comments.nodes[0]?.author) }))
+      /**
+       * Who closed it, and only when we are certain it was a person.
+       *
+       * A PR closed by a stale bot is one you may well revive, and its row is the
+       * thread back to the session that built it. A PR you closed yourself is
+       * finished business. Measured on a real board: three closed by `pr-stalebot`
+       * and three by people, which is exactly the split worth acting on.
+       *
+       * Only `User` counts as a human close. A null or unrecognised actor stays
+       * visible, because the two failures are not symmetrical — an extra chip can be
+       * dismissed with one click, while a wrongly hidden PR has no way back except
+       * reopening it on GitHub.
+       */
+      const closedByHuman = pr.closedBy.nodes[0]?.actor?.__typename === 'User'
       const reviewers = reviewersOf(pr)
 
       /**
@@ -277,6 +295,7 @@ export async function refresh(): Promise<string[]> {
         // #2453 had 25 open human threads while still reading REVIEW_REQUIRED.
         humanReviewed: reviewers.length > 0 || others.length > 0,
         lastHumanReviewAt: reviewedAt,
+        closedByHuman,
         mergedAt: pr.mergedAt,
         fetchedAt: now,
       })

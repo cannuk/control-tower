@@ -109,6 +109,16 @@ describe('APPROACH', () => {
     expect(landed).toHaveLength(0)
   })
 
+  it('keeps a closed PR that had review activity', () => {
+    // Not an oversight. A PR closed for staleness is often one you mean to revive,
+    // and the row is the thread back to the session that built it. Removing them
+    // wholesale was tried and reverted; dismissing them one at a time is the answer.
+    const { approach } = split([
+      session({ prs: [pr({ status: 'diverted', humanReviewed: true })] }),
+    ])
+    expect(approach).toHaveLength(1)
+  })
+
   it('yields to a hold, because parking one is a decision about your next move', () => {
     // Reversed deliberately. "Approved, but I am not merging this yet" is a real
     // state with a real reason to wait, and refusing to park it left the one row
