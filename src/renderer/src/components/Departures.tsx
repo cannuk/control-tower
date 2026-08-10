@@ -191,6 +191,42 @@ function PlanStrip({
   /** Set while the handle is held, which is what arms `draggable`. */
   const [grabbed, setGrabbed] = useState(false)
 
+  /**
+   * Editing happens in place, one field at a time.
+   *
+   * No edit mode and no save button. A plan is two short strings you scribbled to
+   * get them out of your head, and the same speed argument that collapsed the filing
+   * form to a single input applies to changing one afterwards — a modal to fix a typo
+   * is the reason nobody fixes the typo.
+   */
+  const [editing, setEditing] = useState<'title' | 'notes' | null>(null)
+  const [draft, setDraft] = useState('')
+
+  function open(field: 'title' | 'notes'): void {
+    setDraft(field === 'title' ? item.title : (item.notes ?? ''))
+    setEditing(field)
+  }
+
+  /**
+   * Commit on blur as well as on the keyboard, because clicking away is what people
+   * actually do. An empty title is refused rather than saved — the row would become
+   * unidentifiable, and the main process rejects it anyway.
+   */
+  async function commit(): Promise<void> {
+    const field = editing
+    setEditing(null)
+    if (!field) return
+    const value = draft.trim()
+    if (field === 'title') {
+      if (value.length === 0 || value === item.title) return
+      await updateDeparture(item.id, { title: value })
+    } else {
+      const next = value.length > 0 ? value : null
+      if (next === (item.notes ?? null)) return
+      await updateDeparture(item.id, { notes: next })
+    }
+  }
+
   async function launch(): Promise<void> {
     setError(null)
     setBusy(true)
@@ -235,16 +271,63 @@ function PlanStrip({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-4">
-          <p className="min-w-0 flex-1 text-[14px] leading-6 font-medium">{item.title}</p>
+          {editing === 'title' ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => void commit()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commit()
+                if (e.key === 'Escape') setEditing(null)
+              }}
+              className="bg-surface border-accent min-w-0 flex-1 rounded border px-2 py-1 text-[14px] leading-6 font-medium outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => open('title')}
+              title="Click to rename"
+              className="hover:bg-surface min-w-0 flex-1 cursor-text rounded px-2 py-1 -mx-2 text-left text-[14px] leading-6 font-medium transition-colors"
+            >
+              {item.title}
+            </button>
+          )}
           <span className="field text-text-subtle shrink-0 text-[11px]">
             {elapsed(item.createdAt)}
           </span>
         </div>
 
-        {item.notes && (
-          <p className="text-text-muted mt-2.5 text-[12px] leading-relaxed whitespace-pre-wrap">
-            {item.notes}
-          </p>
+        {editing === 'notes' ? (
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => void commit()}
+            // Enter inserts a newline here — notes are prose, and the prompt this
+            // becomes is multi-line. Escape abandons, blur commits.
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setEditing(null)
+            }}
+            rows={Math.min(8, Math.max(3, draft.split('\n').length + 1))}
+            placeholder="Detail, links, constraints — sent to the session after the title"
+            className="bg-surface border-accent mt-2.5 w-full resize-y rounded border px-2 py-1.5 text-[12px] leading-relaxed outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => open('notes')}
+            title="Click to edit the detail"
+            className={cn(
+              'hover:bg-surface mt-2.5 block w-full cursor-text rounded px-2 py-1 -mx-2 text-left',
+              'text-[12px] leading-relaxed whitespace-pre-wrap transition-colors',
+              item.notes ? 'text-text-muted' : 'text-text-subtle italic',
+            )}
+          >
+            {/* An empty plan still offers somewhere to put detail. Without this the
+                only way to add notes to an existing plan was to delete and refile it. */}
+            {item.notes ?? 'Add detail…'}
+          </button>
         )}
 
         {/* The directory is shown as a control, not a field, because it is the one
