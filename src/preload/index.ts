@@ -17,6 +17,9 @@ const api = {
   getBoardLimits: (): Promise<BoardLimits> => ipcRenderer.invoke('prefs:getBoardLimits'),
   setBoardLimits: (limits: Partial<BoardLimits>): Promise<void> =>
     ipcRenderer.invoke('prefs:setBoardLimits', limits),
+  getLaunchRoot: (): Promise<string | null> => ipcRenderer.invoke('prefs:getLaunchRoot'),
+  chooseLaunchRoot: (): Promise<string | null> => ipcRenderer.invoke('prefs:chooseLaunchRoot'),
+  clearLaunchRoot: (): Promise<void> => ipcRenderer.invoke('prefs:clearLaunchRoot'),
   getTitling: (): Promise<boolean> => ipcRenderer.invoke('prefs:getTitling'),
   setTitling: (on: boolean): Promise<void> => ipcRenderer.invoke('prefs:setTitling', on),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),

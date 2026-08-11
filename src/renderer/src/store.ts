@@ -19,6 +19,8 @@ interface State {
    */
   overlay: Overlay
   titling: boolean
+  /** Where the directory picker opens, or null for wherever macOS last had it. */
+  launchRoot: string | null
   /** How many rows each board holds, null meaning all — see DEFAULT_BOARD_LIMITS. */
   boardLimits: BoardLimits
   /**
@@ -48,6 +50,8 @@ interface State {
   init: () => Promise<void>
   setTheme: (theme: ThemeName) => Promise<void>
   setBoardLimit: (board: keyof BoardLimits, limit: number | null) => Promise<void>
+  chooseLaunchRoot: () => Promise<void>
+  clearLaunchRoot: () => Promise<void>
   setBoard: (board: Board) => void
   refresh: (announce?: boolean) => Promise<void>
   loadDepartures: () => Promise<void>
@@ -89,20 +93,22 @@ export const useStore = create<State>((set, get) => ({
   tick: 0,
   overlay: null,
   titling: true,
+  launchRoot: null,
   boardLimits: DEFAULT_BOARD_LIMITS,
   scanId: 0,
   departures: [],
 
   init: async () => {
     try {
-      const [theme, titling, board, boardLimits] = await Promise.all([
+      const [theme, titling, board, boardLimits, launchRoot] = await Promise.all([
         window.controlTower.getTheme(),
         window.controlTower.getTitling(),
         window.controlTower.getBoard(),
         window.controlTower.getBoardLimits(),
+        window.controlTower.getLaunchRoot(),
       ])
       applyTheme(theme)
-      set({ theme, titling, board, boardLimits })
+      set({ theme, titling, board, boardLimits, launchRoot })
       await Promise.all([get().refresh(false), get().loadDepartures()])
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
@@ -113,6 +119,20 @@ export const useStore = create<State>((set, get) => ({
    * Set immediately, persist after. The board re-splits from the new value on the
    * next render, so a slow write must not make the control feel unresponsive.
    */
+  /**
+   * Both of these take the value the main process reports rather than assuming the
+   * dialog was used: cancelling returns whatever was already set, so an optimistic
+   * update here would show a change that never happened.
+   */
+  chooseLaunchRoot: async () => {
+    set({ launchRoot: await window.controlTower.chooseLaunchRoot() })
+  },
+
+  clearLaunchRoot: async () => {
+    await window.controlTower.clearLaunchRoot()
+    set({ launchRoot: null })
+  },
+
   setBoardLimit: async (board, limit) => {
     set({ boardLimits: { ...get().boardLimits, [board]: limit } })
     await window.controlTower.setBoardLimits({ [board]: limit })

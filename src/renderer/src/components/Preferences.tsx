@@ -30,8 +30,18 @@ const BOARD_LIMIT_MAX = 200
  * queue work needing you are better not.
  */
 export function Preferences(): React.JSX.Element {
-  const { theme, setTheme, titling, toggleTitling, boardLimits, setBoardLimit, closeOverlay } =
-    useStore()
+  const {
+    theme,
+    setTheme,
+    titling,
+    toggleTitling,
+    boardLimits,
+    setBoardLimit,
+    launchRoot,
+    chooseLaunchRoot,
+    clearLaunchRoot,
+    closeOverlay,
+  } = useStore()
 
   return (
     <Overlay
@@ -77,6 +87,43 @@ export function Preferences(): React.JSX.Element {
             </span>
           </button>
         ))}
+      </Section>
+
+      <Section title="LAUNCHING">
+        <div className="flex items-start justify-between gap-3 px-2 py-2">
+          <span className="min-w-0">
+            <span className="text-text block text-prose">Directory picker starts in</span>
+            <span className="text-text-subtle mt-0.5 block text-ui leading-snug">
+              {launchRoot ? (
+                // Wrapped rather than truncated: which directory this is can hinge on any
+                // segment of the path, so the end matters as much as the start. Shown in
+                // full because that is how the rest of the app shows a cwd.
+                <span className="field text-text-muted break-all">{launchRoot}</span>
+              ) : (
+                'Wherever macOS last had it. Set one and every plan starts from the same place.'
+              )}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void chooseLaunchRoot()}
+              className="field hover:bg-surface-raised text-text-muted hover:text-text ring-border rounded px-2 py-1 text-footnote font-semibold tracking-wider ring-1 transition-colors"
+            >
+              CHOOSE
+            </button>
+            {launchRoot && (
+              <button
+                type="button"
+                onClick={() => void clearLaunchRoot()}
+                title="Go back to letting macOS decide"
+                className="field hover:bg-surface-raised text-text-subtle hover:text-text rounded px-2 py-1 text-footnote font-semibold tracking-wider transition-colors"
+              >
+                CLEAR
+              </button>
+            )}
+          </span>
+        </div>
       </Section>
 
       <Section title="ROWS PER BOARD">

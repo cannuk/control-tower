@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
 import { DEFAULT_BOARD_LIMITS, type BoardLimits } from '../shared/boards.js'
+import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import Store from 'electron-store'
 import {
@@ -88,6 +89,15 @@ interface Prefs {
    */
   board: Board
   /**
+   * Where the directory picker opens when you choose where a plan should run.
+   *
+   * Null means "wherever macOS last had it", which is the picker's own memory and a
+   * perfectly good default until you keep your work somewhere specific. Set it and
+   * every plan starts from the same place instead of from whatever directory you
+   * happened to open last, in any app.
+   */
+  launchRoot: string | null
+  /**
    * Whether to generate session titles.
    *
    * A switch rather than a constant because the CLI backend spends your Claude
@@ -113,6 +123,7 @@ const store = new Store<Prefs>({
     // APPROACH by default: on a first run the useful question is who is waiting on
     // you, not what you were doing.
     board: 'approach',
+    launchRoot: null,
     titling: true,
   },
 })
@@ -154,6 +165,25 @@ function readBoardLimits(): BoardLimits {
     holding: read('holding'),
     approach: read('approach'),
     landed: read('landed'),
+  }
+}
+
+/**
+ * The picker's starting directory, or null to let macOS decide.
+ *
+ * Checked for existence on every read rather than trusted. This is a path stored
+ * indefinitely and the directory behind it can be renamed, moved or deleted at any
+ * point afterwards; handing a stale one to `defaultPath` opens a dialog pointed at
+ * nothing, which looks like the picker is broken. Falling back to the system default
+ * is both recoverable and self-explanatory.
+ */
+function readLaunchRoot(): string | null {
+  const stored = store.get('launchRoot')
+  if (typeof stored !== 'string' || stored.length === 0) return null
+  try {
+    return statSync(stored).isDirectory() ? stored : null
+  } catch {
+    return null
   }
 }
 
@@ -502,11 +532,40 @@ ipcMain.handle('staging:launch', async (_e, id: number): Promise<TuneResult> => 
 
 /** Native directory picker, so a cwd never has to be typed from memory. */
 ipcMain.handle('dialog:chooseDirectory', async (): Promise<string | null> => {
+  const root = readLaunchRoot()
   const { canceled, filePaths } = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
     message: 'Where should this session run?',
+    // Omitted rather than passed as null when unset, so macOS falls back to its own
+    // memory of where you last were instead of to the filesystem root.
+    ...(root ? { defaultPath: root } : {}),
   })
   return canceled ? null : (filePaths[0] ?? null)
+})
+
+ipcMain.handle('prefs:getLaunchRoot', (): string | null => readLaunchRoot())
+
+/**
+ * Set the picker's starting directory, by picking it.
+ *
+ * A dialog rather than a text field: this is a path, and a path typed from memory is a
+ * path with a typo in it. Returns the new value so the renderer does not have to guess
+ * whether you cancelled.
+ */
+ipcMain.handle('prefs:chooseLaunchRoot', async (): Promise<string | null> => {
+  const current = readLaunchRoot()
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    message: 'Start the directory picker here',
+    ...(current ? { defaultPath: current } : {}),
+  })
+  if (canceled || !filePaths[0]) return current
+  store.set('launchRoot', filePaths[0])
+  return filePaths[0]
+})
+
+ipcMain.handle('prefs:clearLaunchRoot', () => {
+  store.set('launchRoot', null)
 })
 
 /**
