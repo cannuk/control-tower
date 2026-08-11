@@ -48,6 +48,7 @@ const FRAGMENT = `
 fragment F on PullRequest {
   number title state isDraft reviewDecision mergedAt headRefName
   author { login }
+  reviewRequests(first: 1) { totalCount }
   reviews(first: 100) { nodes { state submittedAt author { __typename login } } }
   reviewThreads(first: 100) {
     nodes {
@@ -76,6 +77,7 @@ interface GraphQlPr {
   mergedAt: string | null
   headRefName: string | null
   author: { login: string } | null
+  reviewRequests: { totalCount: number }
   reviews: { nodes: { state: string; submittedAt: string | null; author: Author | null }[] }
   reviewThreads: {
     nodes: {
@@ -156,7 +158,7 @@ function findGh(): string | null {
  * threads count means excluding bots and the author, and that filtering belongs with
  * the caller that already does it.
  */
-function toStatus(pr: GraphQlPr, advisories: number): PrStatus {
+function toStatus(pr: GraphQlPr, advisories: number, reviewers: Reviewer[]): PrStatus {
   if (pr.state === 'MERGED') return 'landed'
   if (pr.state === 'CLOSED') return 'diverted'
   if (pr.isDraft) return 'at-gate'
@@ -167,9 +169,16 @@ function toStatus(pr: GraphQlPr, advisories: number): PrStatus {
 
   if (pr.reviewDecision === 'CHANGES_REQUESTED') return 'hold-short'
   if (pr.reviewDecision === 'APPROVED') return advisories > 0 ? 'cleared-advisory' : 'cleared'
-  // A null reviewDecision means no review has been requested or given yet, which
-  // is the same actionable state as REVIEW_REQUIRED: nobody has looked.
-  return 'inbound'
+
+  /**
+   * No verdict yet, which is four different situations and used to be one.
+   *
+   * `reviewers` has already dropped bots and the author, so "somebody looked" means a
+   * person other than you posted a review or a comment — which is why a PR only
+   * CodeRabbit has touched still counts as unlooked-at.
+   */
+  if (reviewers.length > 0) return advisories > 0 ? 'in-review' : 're-review'
+  return pr.reviewRequests.totalCount > 0 ? 'inbound' : 'unassigned'
 }
 
 function buildQuery(byRepo: Map<string, number[]>): string {
@@ -349,7 +358,7 @@ export async function refresh(): Promise<string[]> {
         repository,
         number: pr.number,
         title: pr.title,
-        status: toStatus(pr, unresolved.length),
+        status: toStatus(pr, unresolved.length, reviewers),
         // Human threads only — see the note on PrRef.advisories.
         advisories: unresolved.length,
         outdatedAdvisories: unresolved.filter((t) => t.isOutdated).length,

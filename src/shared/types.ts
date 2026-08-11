@@ -49,6 +49,16 @@ export type Transponder = 'airborne' | 'idle' | 'no-contact'
  * independent facts and made the board harder to scan than the single question it
  * is actually answering — what is this PR waiting on. The count is now an attribute
  * of the status it qualifies.
+ *
+ * "Awaiting review" is four states, not one, and collapsing them was the same mistake
+ * as collapsing "approved". A single `inbound` meant a PR nobody had been asked to
+ * look at read identically to one where you had addressed every comment and were
+ * waiting on another pass. Whose move it is differs in each:
+ *
+ *   unassigned  nobody has been asked. Yours — request a review.
+ *   inbound     asked, nobody has looked. Theirs.
+ *   in-review   looked at, threads still open. Yours — address them.
+ *   re-review   looked at, everything resolved. Theirs again.
  */
 export type PrStatus =
   | 'landed' /* merged */
@@ -59,7 +69,10 @@ export type PrStatus =
   | 'hold-short' /* changes requested */
   | 'cleared' /* approved, every thread resolved — mergeable */
   | 'cleared-advisory' /* approved, threads still open — read before merging */
-  | 'inbound' /* awaiting review */
+  | 'unassigned' /* nobody asked, nobody looked */
+  | 'inbound' /* review requested, nobody has looked yet */
+  | 'in-review' /* reviewed, threads open — your move */
+  | 're-review' /* reviewed, everything resolved — their move again */
   | 'no-contact' /* fetch failed */
 
 /** One person's share of a PR's unresolved review threads. */

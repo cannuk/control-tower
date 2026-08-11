@@ -285,3 +285,57 @@ describe('a closed pull request', () => {
     )
   })
 })
+
+describe('the four awaiting-review states', () => {
+  it('distinguishes no reviewer from nobody having looked', () => {
+    // The reported confusion: both used to read NEEDS REVIEW, so a PR you had never
+    // asked anyone about looked identical to one you were waiting on.
+    expect(describePr(pr({ status: 'unassigned' }))).toBe('No reviewer has been requested yet.')
+    expect(describePr(pr({ status: 'inbound' }))).toBe('Nobody has looked at this yet.')
+  })
+
+  it('says the ball is back with them once everything is resolved', () => {
+    expect(
+      describePr(
+        pr({
+          status: 're-review',
+          advisories: 0,
+          reviewers: [{ login: 'ada', stance: 'commented' }],
+        }),
+      ),
+    ).toBe('Everything is resolved. Waiting on another look from ada.')
+  })
+
+  it('names several reviewers on a re-review', () => {
+    expect(
+      describePr(
+        pr({
+          status: 're-review',
+          reviewers: [
+            { login: 'ada', stance: 'commented' },
+            { login: 'grace', stance: 'commented' },
+          ],
+        }),
+      ),
+    ).toContain('another look from ada and grace')
+  })
+
+  it('keeps the thread breakdown while threads are still open', () => {
+    // in-review is your move, so the count and whose it is stay the point.
+    const text = describePr(
+      pr({
+        status: 'in-review',
+        advisories: 4,
+        advisors: [{ login: 'ada', threads: 4, outdated: 0 }],
+        reviewers: [{ login: 'ada', stance: 'commented' }],
+      }),
+    )
+    expect(text).toContain('Comments from ada')
+    expect(text).toContain('4 unresolved threads from ada')
+  })
+
+  it('still reports CI on a PR with no reviewer', () => {
+    expect(describePr(pr({ status: 'unassigned' }))).not.toContain('CI')
+    expect(describePr(pr({ status: 'go-around' }))).toContain('CI failing')
+  })
+})

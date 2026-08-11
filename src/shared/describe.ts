@@ -140,15 +140,29 @@ export function describePr(pr: PrRef): string | null {
   }
 
   /**
-   * Say so when nobody has looked yet.
+   * Say so when nobody has looked yet, and say which kind of nobody.
    *
    * These rows only reach APPROACH because the board stopped requiring a review, and
    * without this they arrive with a title, a chip and nothing else — the one state
    * where silence is indistinguishable from "we failed to load anything".
    */
   if (!hadReview && pr.advisories === 0) {
+    const opening =
+      pr.status === 'unassigned'
+        ? 'No reviewer has been requested yet'
+        : 'Nobody has looked at this yet'
     const ci = ciClause(pr.status)
-    return ci ? `Nobody has looked at this yet. ${ci}.` : 'Nobody has looked at this yet.'
+    return ci ? `${opening}. ${ci}.` : `${opening}.`
+  }
+
+  /**
+   * Reviewed and fully resolved: the ball is with them, and saying so is the whole
+   * point of separating this from a PR nobody has been asked about.
+   */
+  if (pr.status === 're-review') {
+    const names = pr.reviewers.map((r) => r.login)
+    const who = names.length > 0 ? ` from ${joinNames(names)}` : ''
+    return `Everything is resolved. Waiting on another look${who}.`
   }
 
   const clauses = [

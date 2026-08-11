@@ -24,7 +24,10 @@ import { cn } from '../lib/utils.js'
  * that is the step it usually is: approved, threads to clear, then mergeable.
  */
 const STATUS_ORDER: PrStatus[] = [
+  'unassigned',
   'inbound',
+  'in-review',
+  're-review',
   'on-final',
   'go-around',
   'hold-short',

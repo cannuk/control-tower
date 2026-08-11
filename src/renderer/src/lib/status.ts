@@ -7,7 +7,10 @@ import {
   Plane,
   PlaneLanding,
   Radio,
+  Reply,
   RotateCcw,
+  RotateCw,
+  UserPlus,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react'
@@ -114,6 +117,19 @@ export const PR_STATUS: Record<PrStatus, StatusPresentation> = {
     chip: 'bg-cleared-advisory text-cleared-advisory-fg',
     Icon: Check,
   },
+  /**
+   * Nobody has been asked and nobody has looked.
+   *
+   * The outlined form of the same cyan `inbound` uses, because it belongs to the same
+   * family — waiting on a review — while being the one member of it where the next
+   * move is yours. Filled means asked; outlined means not yet.
+   */
+  unassigned: {
+    label: 'NO REVIEWER',
+    atc: 'no clearance requested',
+    chip: 'bg-transparent text-inbound ring-1 ring-inbound',
+    Icon: UserPlus,
+  },
   inbound: {
     // Level flight, not a departure. An unreviewed PR is inbound — it is the board's
     // whole premise that these things are arriving, and PlaneTakeoff pointed the
@@ -122,6 +138,31 @@ export const PR_STATUS: Record<PrStatus, StatusPresentation> = {
     atc: 'inbound, awaiting clearance',
     chip: 'bg-inbound text-inbound-fg',
     Icon: Plane,
+  },
+  /**
+   * Reviewed, with threads still open: your move.
+   *
+   * Amber rather than cyan, because the cyan family means "waiting on them" and this
+   * is the one that is waiting on you. Filled, where CHANGES REQ is outlined amber —
+   * both are your move, and the filled one has no formal verdict attached.
+   */
+  'in-review': {
+    label: 'IN REVIEW',
+    atc: 'in contact, working the conversation',
+    chip: 'bg-caution text-caution-fg',
+    Icon: Reply,
+  },
+  /**
+   * Reviewed, everything resolved, waiting for another pass.
+   *
+   * The state that prompted splitting this apart: it used to read NEEDS REVIEW, which
+   * is what a PR nobody had been asked to look at also said.
+   */
+  're-review': {
+    label: 'NEEDS RE-REVIEW',
+    atc: 're-established, awaiting a second look',
+    chip: 'bg-inbound text-inbound-fg',
+    Icon: RotateCw,
   },
   'no-contact': {
     label: 'NO DATA',
