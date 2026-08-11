@@ -53,6 +53,8 @@ function toPrRef(
     outdatedAdvisories: known?.outdatedAdvisories ?? 0,
     advisors: known?.advisors ?? [],
     reviewers: known?.reviewers ?? [],
+    requestedFrom: known?.requestedFrom ?? [],
+    failingChecks: known?.failingChecks ?? [],
     humanReviewed: known?.humanReviewed ?? false,
     mergedAt: known?.mergedAt ?? null,
   }
@@ -100,6 +102,8 @@ function toPrRefs(
         outdatedAdvisories: known?.outdatedAdvisories ?? 0,
         advisors: known?.advisors ?? [],
         reviewers: known?.reviewers ?? [],
+        requestedFrom: known?.requestedFrom ?? [],
+        failingChecks: known?.failingChecks ?? [],
         humanReviewed: known?.humanReviewed ?? false,
         mergedAt: known?.mergedAt ?? null,
       }

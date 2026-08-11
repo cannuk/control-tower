@@ -127,6 +127,22 @@ export interface PrRef {
   /** Humans who have posted a review, and where they landed. Bots excluded. */
   reviewers: Reviewer[]
   /**
+   * Logins and team names a review has been requested from.
+   *
+   * Separate from `reviewers`, who have actually posted something. The gap between
+   * the two is the difference between "three people are sitting on this" and "nobody
+   * has been asked", which read identically until this existed.
+   */
+  requestedFrom: string[]
+  /**
+   * Names of the checks currently failing, owner prefix stripped.
+   *
+   * The rollup state says only red, amber or green, and red covers both a broken build
+   * and an unfilled merge requirement — which was reported as the board crying "CI
+   * FAILED" over a missing label. These names are what tell the two apart.
+   */
+  failingChecks: string[]
+  /**
    * Somebody other than you has reviewed or commented on this PR.
    *
    * The board's central distinction, and what admits a session to APPROACH.

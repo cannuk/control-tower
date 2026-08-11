@@ -37,7 +37,7 @@ export function open(): DatabaseSync {
   // Anything expensive to recompute (scan offsets, PR links, generated titles)
   // is never dropped by this.
   db.exec('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)')
-  const PR_STATUS_SCHEMA = 6
+  const PR_STATUS_SCHEMA = 7
   const current = (
     db.prepare("SELECT value FROM schema_meta WHERE key = 'pr_status'").get() as
       { value: number } | undefined
@@ -97,6 +97,12 @@ export function open(): DatabaseSync {
       -- A person closed this, rather than a stale bot. Hidden from the board when
       -- true: see toPrRefs.
       closed_by_human INTEGER NOT NULL DEFAULT 0,
+      -- Logins and team names a review has been requested from, as JSON. What lets
+      -- "nobody has looked" say whether anybody was even asked.
+      requested_from TEXT NOT NULL DEFAULT '[]',
+      -- Names of the checks currently failing, as JSON. The rollup state cannot tell a
+      -- broken build from an unfilled merge requirement; these names can.
+      failing_checks TEXT NOT NULL DEFAULT '[]',
       merged_at   TEXT,
       fetched_at  INTEGER NOT NULL,
       PRIMARY KEY (repository, number)
@@ -241,6 +247,8 @@ export interface StoredPrStatus {
   advisors: Advisor[]
   reviewers: Reviewer[]
   lastHumanReviewAt: number | null
+  requestedFrom: string[]
+  failingChecks: string[]
   closedByHuman: boolean
   terminal: boolean
   humanReviewed: boolean
@@ -312,8 +320,9 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
   const upsert = database.prepare(
     `INSERT INTO pr_status (repository, number, title, status, advisories, outdated, terminal,
                             human_reviewed, advisors, reviewers, last_human_review_at,
-                            closed_by_human, merged_at, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            closed_by_human, requested_from, failing_checks, merged_at,
+                            fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(repository, number) DO UPDATE SET title = excluded.title,
                                                   status = excluded.status,
                                                   advisories = excluded.advisories,
@@ -324,6 +333,8 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
                                                   reviewers = excluded.reviewers,
                                                   last_human_review_at = excluded.last_human_review_at,
                                                   closed_by_human = excluded.closed_by_human,
+                                                  requested_from = excluded.requested_from,
+                                                  failing_checks = excluded.failing_checks,
                                                   merged_at = excluded.merged_at,
                                                   fetched_at = excluded.fetched_at`,
   )
@@ -360,7 +371,7 @@ export function prStatuses(): Map<string, StoredPrStatus> {
     .prepare(
       `SELECT repository, number, title, status, advisories, outdated, terminal,
                      human_reviewed, advisors, reviewers, last_human_review_at,
-                     closed_by_human, merged_at, fetched_at
+                     closed_by_human, requested_from, failing_checks, merged_at, fetched_at
               FROM pr_status`,
     )
     .all() as {
@@ -376,6 +387,8 @@ export function prStatuses(): Map<string, StoredPrStatus> {
     reviewers: string | null
     last_human_review_at: number | null
     closed_by_human: number
+    requested_from: string | null
+    failing_checks: string | null
     merged_at: string | null
     fetched_at: number
   }[]
@@ -393,6 +406,8 @@ export function prStatuses(): Map<string, StoredPrStatus> {
         reviewers: decodeJson<Reviewer>(r.reviewers),
         lastHumanReviewAt: r.last_human_review_at,
         closedByHuman: r.closed_by_human === 1,
+        requestedFrom: decodeJson<string>(r.requested_from),
+        failingChecks: decodeJson<string>(r.failing_checks),
         terminal: r.terminal === 1,
         humanReviewed: r.human_reviewed === 1,
         mergedAt: r.merged_at,

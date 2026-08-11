@@ -25,6 +25,8 @@ function pr(over: Partial<PrRef> = {}): PrRef {
     outdatedAdvisories: 0,
     advisors: [],
     reviewers: [],
+    requestedFrom: [],
+    failingChecks: [],
     humanReviewed: true,
     mergedAt: null,
     ...over,
@@ -70,12 +72,39 @@ describe('review stance', () => {
   })
 })
 
-describe('CI', () => {
-  it('is mentioned only when it contradicts the stance', () => {
+describe('checks', () => {
+  it('are mentioned only when they contradict the stance', () => {
     const approved = { reviewers: [{ login: 'ada', stance: 'approved' as const }] }
-    expect(describePr(pr({ ...approved, status: 'cleared' }))).not.toContain('CI')
-    expect(describePr(pr({ ...approved, status: 'go-around' }))).toContain('CI failing')
-    expect(describePr(pr({ ...approved, status: 'on-final' }))).toContain('CI still running')
+    expect(describePr(pr({ ...approved, status: 'cleared' }))).not.toContain('Checks')
+    expect(describePr(pr({ ...approved, status: 'go-around' }))).toContain('Checks failing')
+    expect(describePr(pr({ ...approved, status: 'on-final' }))).toContain('Checks still running')
+  })
+
+  it('names what is failing, because most red PRs are not broken builds', () => {
+    // The reported problem, measured: three of the four red PRs on this account were
+    // failing only `labels` and `ticket` — merge requirements with nothing built or
+    // broken — and "CI failing" sent you to a CI log to find an unfilled field.
+    expect(describePr(pr({ status: 'go-around', failingChecks: ['labels', 'ticket'] }))).toContain(
+      'Failing labels and ticket',
+    )
+  })
+
+  it('reads the same way for a real build failure, which is the point', () => {
+    // No category is asserted either way. The name is what tells you which it is.
+    expect(
+      describePr(pr({ status: 'go-around', failingChecks: ['typecheck', 'build'] })),
+    ).toContain('Failing typecheck and build')
+  })
+
+  it('summarises past three rather than listing everything', () => {
+    const text = describePr(pr({ status: 'go-around', failingChecks: ['a', 'b', 'c', 'd', 'e'] }))
+    expect(text).toContain('Failing a, b, c and 2 others')
+  })
+
+  it('falls back to the generic sentence when the names are unknown', () => {
+    // A row cached before the names were collected, or a rollup that is red without
+    // any single context admitting it. Still true, so it is not dropped.
+    expect(describePr(pr({ status: 'go-around', failingChecks: [] }))).toContain('Checks failing')
   })
 })
 
@@ -143,9 +172,9 @@ describe('threads', () => {
     expect(describePr(pr({ status: 'inbound' }))).toBe('Nobody has looked at this yet.')
   })
 
-  it('still mentions CI on a PR nobody has looked at', () => {
-    expect(describePr(pr({ status: 'go-around' }))).toBe(
-      'Nobody has looked at this yet. CI failing.',
+  it('still reports the failing checks on a PR nobody has looked at', () => {
+    expect(describePr(pr({ status: 'go-around', failingChecks: ['ticket'] }))).toBe(
+      'Nobody has looked at this yet. Failing ticket.',
     )
   })
 })
@@ -294,6 +323,31 @@ describe('the four awaiting-review states', () => {
     expect(describePr(pr({ status: 'inbound' }))).toBe('Nobody has looked at this yet.')
   })
 
+  it('names who was asked, so waiting on them differs from having to pick them', () => {
+    // The second half of the same confusion, reported on a PR with three requested
+    // reviewers: the chip said NEEDS REVIEW and the sentence said nobody had looked,
+    // which reads exactly like nobody having been asked.
+    expect(
+      describePr(
+        pr({ status: 'inbound', requestedFrom: ['reviewer-a', 'reviewer-b', 'reviewer-c'] }),
+      ),
+    ).toBe('Requested from reviewer-a, reviewer-b and reviewer-c, nobody has looked yet.')
+  })
+
+  it('does not claim nobody was asked just because we do not know who', () => {
+    // A row cached before the names were collected still knows a request exists. The
+    // status is authoritative; falling back to "no reviewer" would contradict the chip.
+    expect(describePr(pr({ status: 'inbound', requestedFrom: [] }))).toBe(
+      'Nobody has looked at this yet.',
+    )
+  })
+
+  it('names a requested team the same way it names a person', () => {
+    expect(describePr(pr({ status: 'inbound', requestedFrom: ['web-platform'] }))).toBe(
+      'Requested from web-platform, nobody has looked yet.',
+    )
+  })
+
   it('says the ball is back with them once everything is resolved', () => {
     expect(
       describePr(
@@ -334,8 +388,10 @@ describe('the four awaiting-review states', () => {
     expect(text).toContain('4 unresolved threads from ada')
   })
 
-  it('still reports CI on a PR with no reviewer', () => {
-    expect(describePr(pr({ status: 'unassigned' }))).not.toContain('CI')
-    expect(describePr(pr({ status: 'go-around' }))).toContain('CI failing')
+  it('still reports failing checks on a PR with no reviewer', () => {
+    expect(describePr(pr({ status: 'unassigned' }))).not.toContain('Failing')
+    expect(describePr(pr({ status: 'go-around', failingChecks: ['labels'] }))).toContain(
+      'Failing labels',
+    )
   })
 })

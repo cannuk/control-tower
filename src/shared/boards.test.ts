@@ -27,6 +27,8 @@ function pr(over: Partial<PrRef> = {}): PrRef {
     outdatedAdvisories: 0,
     advisors: [],
     reviewers: [],
+    requestedFrom: [],
+    failingChecks: [],
     humanReviewed: false,
     mergedAt: null,
     ...over,

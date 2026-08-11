@@ -43,12 +43,33 @@ const GH_CANDIDATES = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh
  * per person — someone who requested changes and later approved must not still read
  * as blocking — and a long-running PR accumulates COMMENTED reviews that would
  * otherwise push the decisive ones out of the window.
+ *
+ * `contexts` is 30 for the opposite reason: it is where the query runs out of budget.
+ * Cost in that argument is superlinear, and at 54 pull requests in one batch `first:
+ * 60` returned HTTP 504 every time while 30 came back in 8-9 seconds over repeated
+ * runs — the same as before contexts were selected at all. The busiest PR on this
+ * account carries 23 of them, so 30 clears it with room. Truncation past 30 is
+ * survivable rather than wrong: it can only cost the sentence a name it would have
+ * listed, and a red rollup with nothing named falls back to saying so generically.
+ *
+ * That headroom is thin, though, and it shrinks as the number of tracked PRs grows.
+ * The next field added here should come with a chunked query rather than on top of
+ * this one.
  */
 const FRAGMENT = `
 fragment F on PullRequest {
   number title state isDraft reviewDecision mergedAt headRefName
   author { login }
-  reviewRequests(first: 1) { totalCount }
+  reviewRequests(first: 10) {
+    totalCount
+    nodes {
+      requestedReviewer {
+        __typename
+        ... on User { login }
+        ... on Team { name }
+      }
+    }
+  }
   reviews(first: 100) { nodes { state submittedAt author { __typename login } } }
   reviewThreads(first: 100) {
     nodes {
@@ -57,7 +78,21 @@ fragment F on PullRequest {
       latest: comments(last: 1) { nodes { createdAt author { __typename login } } }
     }
   }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  commits(last: 1) {
+    nodes {
+      commit {
+        statusCheckRollup {
+          state
+          contexts(first: 30) {
+            nodes {
+              ... on CheckRun { name conclusion }
+              ... on StatusContext { context state }
+            }
+          }
+        }
+      }
+    }
+  }
   closedBy: timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
     nodes { ... on ClosedEvent { actor { __typename } } }
   }
@@ -77,7 +112,10 @@ interface GraphQlPr {
   mergedAt: string | null
   headRefName: string | null
   author: { login: string } | null
-  reviewRequests: { totalCount: number }
+  reviewRequests: {
+    totalCount: number
+    nodes: { requestedReviewer?: { __typename: string; login?: string; name?: string } | null }[]
+  }
   reviews: { nodes: { state: string; submittedAt: string | null; author: Author | null }[] }
   reviewThreads: {
     nodes: {
@@ -89,8 +127,61 @@ interface GraphQlPr {
       latest: { nodes: { createdAt: string | null; author: Author | null }[] }
     }[]
   }
-  commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] }
+  commits: {
+    nodes: {
+      commit: {
+        statusCheckRollup: {
+          state: string
+          contexts: { nodes: CheckContext[] }
+        } | null
+      }
+    }[]
+  }
   closedBy: { nodes: { actor?: Author | null }[] }
+}
+
+/**
+ * One entry in the check rollup, in either of the two shapes GitHub returns.
+ *
+ * `CheckRun` is a GitHub Actions job and carries `name`/`conclusion`; `StatusContext`
+ * is the older commit-status API and carries `context`/`state`. Both appear on the
+ * same PR and both can fail, so neither shape can be ignored. Every field is optional
+ * because the union collapses to `{}` for a node of the other type.
+ */
+interface CheckContext {
+  name?: string
+  conclusion?: string | null
+  context?: string
+  state?: string
+}
+
+/** Rollup results that mean a check finished badly, as opposed to running or passing. */
+const FAILED_RESULTS = new Set(['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED'])
+
+/**
+ * The names of the checks that are actually failing.
+ *
+ * The rollup state alone said "CI failing", which is wrong about most of them.
+ * Measured across the open PRs on this account: three of the four red ones failed
+ * only on `labels` and `ticket` — merge policy, nothing built or broken — and one
+ * genuinely failed `typecheck` and `build`. Reading all four as a broken build sends
+ * you to a CI log to find an unfilled field.
+ *
+ * Names rather than a category, because there is no reliable way to classify one:
+ * policy gates and build gates arrive through both API shapes, and `ci-passes` is a
+ * commit status that really is about CI. The name is the thing the user recognises.
+ */
+function failingChecksOf(pr: GraphQlPr): string[] {
+  const contexts = pr.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []
+  const names = contexts
+    .filter((c) => FAILED_RESULTS.has(c.conclusion ?? c.state ?? ''))
+    .map((c) => c.name ?? c.context)
+    .filter((name): name is string => typeof name === 'string' && name.length > 0)
+    // Strip the owner prefix GitHub apps put on commit statuses: "example-org/labels" is
+    // read as "labels" by anyone looking at the PR, and the prefix is the same on
+    // every one of them.
+    .map((name) => name.split('/').at(-1) ?? name)
+  return [...new Set(names)]
 }
 
 /** A null author is a deleted account — treat as human, not as a bot. */
@@ -331,6 +422,18 @@ export async function refresh(options: { force?: boolean } = {}): Promise<string
         headRefs.push({ repository, number: pr.number, headRef: pr.headRefName })
       }
 
+      /**
+       * Who has been asked, by name.
+       *
+       * A count was enough to pick the status apart but not to explain it: "nobody has
+       * looked at this yet" is true whether three people are sitting on it or nobody
+       * has been asked, and those are opposite situations. A team counts as an asked
+       * party too, so both shapes of `requestedReviewer` are read.
+       */
+      const requestedFrom = pr.reviewRequests.nodes
+        .map((n) => n.requestedReviewer?.login ?? n.requestedReviewer?.name)
+        .filter((name): name is string => typeof name === 'string' && name.length > 0)
+
       const reviewers = reviewersOf(pr)
 
       /**
@@ -369,6 +472,8 @@ export async function refresh(options: { force?: boolean } = {}): Promise<string
         // #2453 had 25 open human threads while still reading REVIEW_REQUIRED.
         humanReviewed: reviewers.length > 0 || others.length > 0,
         lastHumanReviewAt: reviewedAt,
+        requestedFrom,
+        failingChecks: failingChecksOf(pr),
         closedByHuman,
         mergedAt: pr.mergedAt,
         fetchedAt: now,

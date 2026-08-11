@@ -58,15 +58,40 @@ function stanceClause(reviewers: Reviewer[]): string | null {
 }
 
 /**
- * CI, mentioned only when it changes what you would do.
+ * How many failing checks to name before summarising the rest.
+ *
+ * Same reason as the advisor cap: past three the names stop fitting on a strip, and a
+ * PR failing eight checks has one problem rather than eight.
+ */
+const MAX_NAMED_CHECKS = 3
+
+/**
+ * Checks, mentioned only when they change what you would do, and named when they do.
  *
  * A green PR needs no sentence about being green. A failing one does, because
- * "approved" reads as ready and it is not.
+ * "approved" reads as ready and it is not — but "CI failing" was wrong about most of
+ * them. Measured across the open PRs on this account, three of the four red ones were
+ * failing only `labels` and `ticket`: merge requirements with nothing built or broken.
+ * Reading that as a broken build sends you to a CI log to find an unfilled field.
+ *
+ * So it names them instead of classifying them. There is no dependable way to tell a
+ * policy gate from a build gate — both arrive through both of GitHub's check APIs, and
+ * `ci-passes` is a commit status that really is about CI — but the name alone is
+ * enough for you to know which it is.
  */
-function ciClause(status: PrRef['status']): string | null {
-  if (status === 'go-around') return 'CI failing'
-  if (status === 'on-final') return 'CI still running'
-  return null
+function ciClause(status: PrRef['status'], failing: string[]): string | null {
+  if (status === 'on-final') return 'Checks still running'
+  if (status !== 'go-around') return null
+
+  // The names can be missing on a row cached before they were collected, or when the
+  // rollup is red without any individual context saying so. The generic sentence is
+  // still true, so it stays as the floor rather than the row going silent about it.
+  if (failing.length === 0) return 'Checks failing'
+
+  const named = failing.slice(0, MAX_NAMED_CHECKS)
+  const rest = failing.length - named.length
+  const list = rest > 0 ? `${named.join(', ')} and ${plural(rest, 'other')}` : joinNames(named)
+  return `Failing ${list}`
 }
 
 /**
@@ -147,11 +172,26 @@ export function describePr(pr: PrRef): string | null {
    * where silence is indistinguishable from "we failed to load anything".
    */
   if (!hadReview && pr.advisories === 0) {
+    /**
+     * Name who was asked, or say that nobody was.
+     *
+     * "Nobody has looked at this yet" is true of both situations and useless for
+     * telling them apart — reported on a PR sitting with three requested reviewers,
+     * where it read as though no review had been requested at all. Waiting on three
+     * people and needing to pick one are opposite problems.
+     *
+     * The branch comes from `status`, not from whether names are present: `unassigned`
+     * is the authoritative "nobody was asked", and a row that knows a request exists
+     * but not who it went to must not claim otherwise. The names only fill the
+     * sentence in.
+     */
     const opening =
       pr.status === 'unassigned'
         ? 'No reviewer has been requested yet'
-        : 'Nobody has looked at this yet'
-    const ci = ciClause(pr.status)
+        : pr.requestedFrom.length > 0
+          ? `Requested from ${joinNames(pr.requestedFrom)}, nobody has looked yet`
+          : 'Nobody has looked at this yet'
+    const ci = ciClause(pr.status, pr.failingChecks)
     return ci ? `${opening}. ${ci}.` : `${opening}.`
   }
 
@@ -167,7 +207,7 @@ export function describePr(pr: PrRef): string | null {
 
   const clauses = [
     stanceClause(pr.reviewers),
-    ciClause(pr.status),
+    ciClause(pr.status, pr.failingChecks),
     threadClause(pr.advisories, pr.advisors, hadReview),
     outdatedClause(pr.advisories, pr.advisors),
   ].filter((c): c is string => c !== null)

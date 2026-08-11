@@ -75,13 +75,17 @@ export const PR_STATUS: Record<PrStatus, StatusPresentation> = {
     Icon: Warehouse,
   },
   'go-around': {
-    label: 'CI FAILED',
+    // "CHECKS FAILED" rather than "CI FAILED": most red PRs measured on this account
+    // were failing a merge requirement, not a build, and the chip has no room to name
+    // which — the review paragraph does that. "Checks" is GitHub's own umbrella term
+    // and is the one word true of both.
+    label: 'CHECKS FAILED',
     atc: 'go around — approach aborted',
     chip: 'bg-alert text-alert-fg',
     Icon: RotateCcw,
   },
   'on-final': {
-    label: 'CI RUNNING',
+    label: 'CHECKS RUNNING',
     atc: 'on final',
     chip: 'bg-approach text-approach-fg',
     Icon: PlaneLanding,
