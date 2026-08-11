@@ -137,8 +137,8 @@ export function FlightStrip({
             className={cn(
               'size-2.5 shrink-0 rounded-full',
               dot.dot,
-              // Only a generating session pulses. Anything else drawing the eye is noise.
-              dot.pulse && 'animate-sweep',
+              // Only a generating session blips. Anything else drawing the eye is noise.
+              dot.pulse && 'animate-blip',
             )}
           />
         )}

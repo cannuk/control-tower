@@ -155,7 +155,7 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
             left={
               <span className="flex w-full justify-center">
                 <span
-                  className={cn('size-2.5 rounded-full', entry.dot, entry.pulse && 'animate-sweep')}
+                  className={cn('size-2.5 rounded-full', entry.dot, entry.pulse && 'animate-blip')}
                 />
               </span>
             }

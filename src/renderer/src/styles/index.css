@@ -255,7 +255,12 @@
     animation: radar-flare 900ms ease-out forwards;
   }
 
-  /* One radar sweep. Slow, subtle — a status heartbeat, not an animation. */
+  /*
+   * A slow throb, for the two places the subject is an icon rather than a target: the
+   * sweep glyph while a scan runs, and an in-progress status chip. A blip's expanding
+   * ring belongs to a point return and reads as noise around a shape that already has
+   * an outline, so those keep breathing.
+   */
   @keyframes sweep-pulse {
     0%,
     100% {
@@ -267,5 +272,78 @@
   }
   .animate-sweep {
     animation: sweep-pulse 2.4s ease-in-out infinite;
+  }
+
+  /*
+   * A radar return, once per antenna revolution.
+   *
+   * This was a symmetrical opacity throb between 0.35 and 1, which reads as a
+   * notification badge rather than a target on a scope. A real blip does not breathe:
+   * the beam paints it, it is instantly at full brightness, and then the phosphor
+   * decays until the beam comes round again. The asymmetry is the whole tell — sharp
+   * attack, long decay, and nothing at all like the way back up.
+   *
+   * Three parts, all on the same 2.4s period so they read as one event:
+   *   - the paint: full brightness with a tight bloom, held only for a moment
+   *   - the decay: a long ease-out fade to a dim persistent trace, never to nothing,
+   *     because the target is still there between sweeps
+   *   - the echo: one ring expanding away from the return and fading, which is what
+   *     makes it read as detected rather than merely lit
+   *
+   * `currentColor` throughout, so the dot's own token drives it and the two CRT
+   * palettes get their own hue for free.
+   */
+  @keyframes radar-return {
+    0% {
+      opacity: 1;
+      box-shadow: 0 0 5px 1.5px color-mix(in oklab, currentColor 60%, transparent);
+    }
+    8% {
+      opacity: 1;
+      box-shadow: 0 0 4px 1px color-mix(in oklab, currentColor 45%, transparent);
+    }
+    100% {
+      opacity: 0.3;
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+
+  @keyframes radar-echo {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    /* Gone well before the ring stops growing, so it dissipates rather than
+     * arriving somewhere and vanishing. */
+    65% {
+      opacity: 0;
+    }
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+
+  .animate-blip {
+    position: relative;
+    /* Fast out of the gate, then a long tail — phosphor, not a sine wave. */
+    animation: radar-return 2.4s cubic-bezier(0.12, 0.75, 0.2, 1) infinite;
+  }
+
+  /*
+   * The expanding ring. A pseudo-element rather than a second node so the dot stays
+   * one element everywhere it is rendered, and absolutely positioned so a ring 2.4×
+   * the dot never occupies layout — the gutter it sits in is a fixed width shared
+   * with the squawk, and a growing element there would shove the field sideways
+   * twice a second.
+   */
+  .animate-blip::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1px solid currentColor;
+    animation: radar-echo 2.4s cubic-bezier(0.12, 0.75, 0.2, 1) infinite;
+    pointer-events: none;
   }
 }

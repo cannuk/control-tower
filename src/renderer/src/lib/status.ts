@@ -199,7 +199,9 @@ export type DotKind = 'generating' | 'unread' | 'quiet'
 export const DOT_KEY: { kind: DotKind; dot: string; pulse?: boolean; label: string }[] = [
   {
     kind: 'generating',
-    dot: 'bg-squawk-live',
+    // Both the fill and the colour: the blip's bloom and echo ring are drawn from
+    // currentColor, which would otherwise inherit body text and paint them grey.
+    dot: 'bg-squawk-live text-squawk-live',
     pulse: true,
     label: 'Generating right now — new output still arriving',
   },
