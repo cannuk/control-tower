@@ -354,6 +354,8 @@ export function putPrStatus(rows: StoredPrStatus[]): void {
         JSON.stringify(r.reviewers),
         r.lastHumanReviewAt,
         r.closedByHuman ? 1 : 0,
+        JSON.stringify(r.requestedFrom),
+        JSON.stringify(r.failingChecks),
         r.mergedAt,
         r.fetchedAt,
       )
@@ -567,7 +569,7 @@ export function markRead(sessionId: string, at: number): void {
  * ignore it. A session is only unread once it moves *after* Control Tower first
  * noticed it.
  */
-export function seedRead(entries: { sessionId: string; lastContact: number }[]): void {
+export function seedRead(entries: { sessionId: string; activityAt: number }[]): void {
   if (entries.length === 0) return
   ensureReadTable()
   const database = open()
@@ -576,7 +578,7 @@ export function seedRead(entries: { sessionId: string; lastContact: number }[]):
   )
   database.exec('BEGIN')
   try {
-    for (const e of entries) insert.run(e.sessionId, e.lastContact)
+    for (const e of entries) insert.run(e.sessionId, e.activityAt)
     database.exec('COMMIT')
   } catch (cause) {
     database.exec('ROLLBACK')
@@ -620,6 +622,22 @@ export function setHeld(sessionId: string, held: boolean): void {
   } else {
     database.prepare('DELETE FROM session_hold WHERE session_id = ?').run(sessionId)
   }
+
+  /**
+   * Moving a row is an act of attention, so it counts as having seen it.
+   *
+   * Without this, parking a PR left it showing "new activity since you last opened
+   * it" over the very review you parked it in response to — the read mark can be days
+   * older than the hold, and nothing in between updated it. `releaseReviewedHolds`
+   * already reasons this way, comparing review times against `held_at` so that
+   * activity predating a hold cannot release it; this gives the dot the same notion.
+   *
+   * Applies to releasing too. Pressing either button means you are looking at the row
+   * and deciding about it, and a dot that survives that is a dot about nothing.
+   * Automatic release is the deliberate exception: it sets the mark to 0 so a review
+   * that arrived while you were away announces itself.
+   */
+  markRead(sessionId, Date.now())
 }
 
 /**

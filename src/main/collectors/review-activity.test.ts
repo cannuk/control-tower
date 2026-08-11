@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lastHumanReviewAt, type ReviewEvent } from './review-activity.js'
+import { lastActivityAt, lastHumanReviewAt, type ReviewEvent } from './review-activity.js'
 
 /**
  * When somebody else last reviewed a pull request.
@@ -85,5 +85,46 @@ describe('bad input cannot release a hold', () => {
 
   it('returns null for no events at all', () => {
     expect(lastHumanReviewAt([], 'author')).toBeNull()
+  })
+})
+
+/**
+ * What counts as activity for the unread dot.
+ *
+ * Unread ran on the transcript's mtime alone, so the dot answered "did the terminal
+ * move" when the question is "did anything happen to this". Every case here is a state
+ * that produced no dot at all before.
+ */
+describe('activity from every source', () => {
+  const TRANSCRIPT = 1_000
+  const REVIEW = 2_000
+
+  it('takes the transcript when it is the newest thing', () => {
+    expect(lastActivityAt(TRANSCRIPT, [null])).toBe(TRANSCRIPT)
+  })
+
+  it('takes a review that lands while the terminal sits idle', () => {
+    // The main gap: somebody approves your PR, the transcript never changes, and the
+    // row stayed marked read.
+    expect(lastActivityAt(TRANSCRIPT, [REVIEW])).toBe(REVIEW)
+  })
+
+  it('keeps the transcript when the review is older than it', () => {
+    expect(lastActivityAt(REVIEW, [TRANSCRIPT])).toBe(REVIEW)
+  })
+
+  it('takes the newest review across several PRs on one row', () => {
+    expect(lastActivityAt(null, [1_500, 3_000, 2_000])).toBe(3_000)
+  })
+
+  it('works with no transcript at all, which is every PR-only row', () => {
+    // These have nothing that grows, so under the old rule they could never go
+    // unread under any circumstances.
+    expect(lastActivityAt(null, [REVIEW])).toBe(REVIEW)
+  })
+
+  it('is zero when nothing is known, so a quiet row stays read', () => {
+    expect(lastActivityAt(null, [])).toBe(0)
+    expect(lastActivityAt(null, [null, null])).toBe(0)
   })
 })

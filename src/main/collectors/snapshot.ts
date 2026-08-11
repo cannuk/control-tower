@@ -8,6 +8,7 @@ import { indexPrLinks, listTranscripts, resolveCwd } from './transcripts.js'
 import { firstUserMessage } from './excerpt.js'
 import { heuristicTitle } from './heuristic-title.js'
 import { inferCwd, prSession, sessionOnBranch } from './orphan-prs.js'
+import { lastActivityAt } from './review-activity.js'
 
 /**
  * Assemble one sweep from the four sources (PLAN.md §2).
@@ -236,38 +237,18 @@ export async function collect(): Promise<SessionSnapshot> {
       ...resolveSummary(sessionId, opening, providerTitles, ownTitles),
       fallbackName: entry?.name ?? basename(cwd),
       transponder: transponderFor(entry?.status ?? null, entry !== undefined),
-      lastContact: info.mtimeMs,
+      lastContact: info.lastActivityMs,
       startedAt: entry?.startedAt ?? null,
       transcriptPath: info.path,
       prs: toPrRefs(sessionId, prLinks, prStatuses, dismissed),
       // Resolved at click time by the provider (see cmux.focus), so this only
       // records whether tuning is plausible at all.
       location: entry ? { providerId: 'cmux', handle: sessionId, exact: true } : null,
-      /**
-       * New activity since you last opened it.
-       *
-       * A session with no mark yet is *read*, not unread — it is seeded below at
-       * whatever activity it already had. Treating unknown as unread would flag every
-       * session on the first sweep after this shipped, and an inbox that starts full
-       * teaches you to ignore it.
-       */
-      unread: info.mtimeMs > (readMarks.get(sessionId) ?? info.mtimeMs),
+      // Filled in below, once the row's PRs can be consulted.
+      unread: false,
       held: held.has(sessionId),
     })
   }
-
-  /**
-   * Anything we have never seen before starts read, from this moment on.
-   *
-   * Real sessions only. A pull-request row has no transcript to grow, so it can never
-   * become unread, and seeding one just accumulates rows keyed on an id that no
-   * session owns.
-   */
-  cache.seedRead(
-    sessions
-      .filter((s) => s.origin === 'session' && !readMarks.has(s.sessionId))
-      .map((s) => ({ sessionId: s.sessionId, lastContact: s.lastContact })),
-  )
 
   await refreshDirty(cwds)
   for (const session of sessions) {
@@ -300,6 +281,40 @@ export async function collect(): Promise<SessionSnapshot> {
 
     sessions.push(prSession(pr, ref, inferCwd(sessions, pr.repository, pr.headRef)))
   }
+
+  /**
+   * Unread, resolved last so that every source of activity is already attached.
+   *
+   * After PR reconciliation on purpose: a PR discovered from GitHub can join an
+   * existing row or create one, and both cases change the answer. Computing this in
+   * the session loop above missed every PR that arrived here, which is all of the
+   * session-less ones and any attached by branch.
+   */
+  const activity = new Map<string, number>()
+  for (const session of sessions) {
+    const reviewedAt = session.prs.map(
+      (pr) => prStatuses.get(prKey(pr.repository, pr.number))?.lastHumanReviewAt ?? null,
+    )
+    const at = lastActivityAt(session.transcriptPath ? session.lastContact : null, reviewedAt)
+    activity.set(session.sessionId, at)
+
+    /**
+     * A row with no mark yet is *read*, not unread — it is seeded just below at
+     * whatever activity it already had. Treating unknown as unread would flag every
+     * row on the first sweep after a change like this ships, and an inbox that starts
+     * full teaches you to ignore it.
+     */
+    session.unread = at > (readMarks.get(session.sessionId) ?? at)
+  }
+
+  // Seeded from the same value the flag is compared against, and for PR rows too —
+  // they are keyed on a synthetic id, but that id is stable, and it is the only way a
+  // review arriving after first sight can be told from one that predates it.
+  cache.seedRead(
+    sessions
+      .filter((s) => !readMarks.has(s.sessionId))
+      .map((s) => ({ sessionId: s.sessionId, activityAt: activity.get(s.sessionId) ?? 0 })),
+  )
 
   return { sessions, sweptAt: Date.now(), warnings }
 }

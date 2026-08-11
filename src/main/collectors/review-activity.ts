@@ -52,3 +52,29 @@ export function lastHumanReviewAt(
 
   return newest
 }
+
+/**
+ * When a row last changed, across every source that counts as a change.
+ *
+ * Unread was wired to the transcript's mtime alone, which is only half of what a row
+ * is. A session row is also a pull request: somebody approving it, requesting changes,
+ * or leaving six threads on it is new activity by any reading of the word, and none of
+ * it writes a byte to the transcript. So a PR reviewed while the terminal sat idle
+ * stayed marked read, and rows with no session at all — which have no transcript to
+ * grow — could never go unread under any circumstances.
+ *
+ * Review time, not the PR's `updatedAt`. `updatedAt` moves when *you* push, and a row
+ * that flags itself because you just committed to it is noise that trains you to
+ * ignore the dot. `lastHumanReviewAt` has already excluded you and the bots.
+ *
+ * Zero when nothing is known, which reads as "no activity ever" and leaves the row
+ * read. Callers seed a new row's read mark with this same value, so a PR reviewed long
+ * before Control Tower first saw it does not arrive already shouting.
+ */
+export function lastActivityAt(transcriptAt: number | null, reviewedAt: (number | null)[]): number {
+  let newest = transcriptAt ?? 0
+  for (const at of reviewedAt) {
+    if (at !== null && at > newest) newest = at
+  }
+  return newest
+}

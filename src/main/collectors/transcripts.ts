@@ -1,4 +1,5 @@
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
+import { cachedLastActivityAt } from './last-activity.js'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { projectDir as titlerProjectDir } from '../titler/cli.js'
@@ -49,6 +50,14 @@ export interface TranscriptInfo {
   sessionId: string
   path: string
   mtimeMs: number
+  /**
+   * When the session last actually spoke, from the newest conversation entry inside
+   * the file — which is not the same as `mtimeMs`. See last-activity.ts: recap
+   * records land now and describe days ago, and on this machine that had 88 of 158
+   * transcripts claiming activity they had not had. Falls back to `mtimeMs` only when
+   * the content cannot answer.
+   */
+  lastActivityMs: number
   size: number
   /** cwd as recorded inside the transcript — see resolveCwd below. */
   recordedCwd: string | null
@@ -99,6 +108,7 @@ export function listTranscripts(): {
           sessionId: basename(file, '.jsonl'),
           path,
           mtimeMs: stat.mtimeMs,
+          lastActivityMs: cachedLastActivityAt(path, stat.size, stat.mtimeMs) ?? stat.mtimeMs,
           size: stat.size,
           recordedCwd: null,
         })
