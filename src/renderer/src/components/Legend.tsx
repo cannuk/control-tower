@@ -1,5 +1,5 @@
 import { ADVISORY_ICON, DOT_KEY, PR_STATUS } from '../lib/status.js'
-import { Overlay, Row, Section } from './Overlay.js'
+import { Overlay, Row, Section, Subhead } from './Overlay.js'
 import type { PrStatus } from '../../../shared/types.js'
 import { cn } from '../lib/utils.js'
 
@@ -19,10 +19,47 @@ import { cn } from '../lib/utils.js'
  */
 
 /**
- * Roughly the order a PR moves through, so the key reads as a progression rather
- * than an alphabet. `cleared-advisory` sits immediately before `cleared` because
- * that is the step it usually is: approved, threads to clear, then mergeable.
+ * The phases a pull request passes through, and which statuses belong to each.
+ *
+ * Thirteen statuses in one flat list was an alphabet: correct, ordered roughly by
+ * progression, and still something you had to read end to end to find the one you were
+ * looking at. Five named phases turn the same thirteen into short lists, and the phase
+ * names answer the question a key is for — not "what does this chip say" but "where in
+ * the process am I".
+ *
+ * A `Record` keyed by `PrStatus` rather than an array, so the compiler enforces that
+ * every status appears. Adding a fourteenth status without deciding where it belongs is
+ * a type error rather than a chip that quietly never appears in the key.
  */
+const PHASES = [
+  ['Waiting on a reviewer', 'Nobody has posted a review yet.'],
+  ['Under review', 'Somebody has looked; the question is whose move it is.'],
+  ['Checks', 'What the build and the merge requirements say.'],
+  ['Verdict in', 'A human has given an answer.'],
+  ['Off the board', 'Finished, or never started.'],
+] as const
+
+type Phase = (typeof PHASES)[number][0]
+
+const PHASE_OF: Record<PrStatus, Phase> = {
+  unassigned: 'Waiting on a reviewer',
+  inbound: 'Waiting on a reviewer',
+  'in-review': 'Under review',
+  're-review': 'Under review',
+  'on-final': 'Checks',
+  'go-around': 'Checks',
+  'hold-short': 'Verdict in',
+  // Immediately before `cleared`, because that is the step it usually is: approved,
+  // threads to clear, then mergeable.
+  'cleared-advisory': 'Verdict in',
+  cleared: 'Verdict in',
+  landed: 'Off the board',
+  diverted: 'Off the board',
+  'at-gate': 'Off the board',
+  'no-contact': 'Off the board',
+}
+
+/** Statuses in a phase, in the order they are declared above. */
 const STATUS_ORDER: PrStatus[] = [
   'unassigned',
   'inbound',
@@ -55,7 +92,7 @@ const BOARDS: [string, string][] = [
   ],
   [
     'EN ROUTE',
-    'A running session touched in the last 8 hours that has no pull request yet. Opening one moves the work to APPROACH. An exited session is not in flight, however recently you left it',
+    'The running sessions you spoke to most recently, that have no pull request yet — as many as you set in preferences. Opening one moves the work to APPROACH. An exited session is not in flight, however recently you left it',
   ],
   [
     'APPROACH',
@@ -93,38 +130,54 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
       onClose={onClose}
     >
       <Section title="PULL REQUEST STATUS">
-        {STATUS_ORDER.map((status) => {
-          const { label, atc, chip, Icon } = PR_STATUS[status]
-          return (
-            <Row
-              key={status}
-              left={
-                <span
-                  className={cn(
-                    'field inline-flex items-center gap-1.5 rounded px-2 py-1',
-                    'text-ui leading-none font-semibold',
-                    chip,
-                  )}
-                >
-                  <Icon size={11} strokeWidth={2.5} aria-hidden />
-                  {label}
-                </span>
-              }
-              right={atc}
-            />
-          )
-        })}
+        {PHASES.map(([phase, gloss]) => (
+          <div key={phase}>
+            <Subhead>
+              <span className="text-text-muted font-semibold">{phase}</span> — {gloss}
+            </Subhead>
+            {STATUS_ORDER.filter((status) => PHASE_OF[status] === phase).map((status) => {
+              const { label, atc, chip, Icon } = PR_STATUS[status]
+              return (
+                <Row
+                  key={status}
+                  left={
+                    <span
+                      /* StatusChip's own classes, so a sample in the key is the thing it
+                         describes: same padding, same weight, same 75% on the label.
+                         whitespace-nowrap because a chip is a fixed token — allowed to be
+                         wider than its column, never taller. */
+                      className={cn(
+                        'field inline-flex items-center gap-1.5 rounded px-2.5 py-1.5',
+                        'text-ui leading-none font-semibold whitespace-nowrap',
+                        chip,
+                      )}
+                    >
+                      <Icon size={11} strokeWidth={2.5} aria-hidden />
+                      <span className="opacity-75">{label}</span>
+                    </span>
+                  }
+                  right={atc}
+                />
+              )
+            })}
+          </div>
+        ))}
+        <Subhead>
+          <span className="text-text-muted font-semibold">The whole chip</span> — as it appears on a
+          strip.
+        </Subhead>
         <Row
           left={
-            <span className="field bg-cleared-advisory text-cleared-advisory-fg inline-flex items-center gap-1.5 rounded px-2 py-1 text-ui leading-none font-semibold">
+            <span className="field bg-cleared-advisory text-cleared-advisory-fg inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-ui leading-none font-semibold whitespace-nowrap">
+              <span>2493</span>
               <span className="opacity-75">APPROVED</span>
-              <span className="inline-flex items-center gap-1 border-l border-current/30 pl-2">
+              <span className="ml-0.5 inline-flex items-center gap-1 border-l border-current/30 pl-2">
                 <ADVISORY_ICON size={10} strokeWidth={2.5} aria-hidden />
                 17
               </span>
             </span>
           }
-          right="The count after any status is unresolved review threads — other people’s, never yours or a bot’s. It disappears once the PR is merged or closed"
+          right="The pull request number, its status, and the count of unresolved review threads — other people’s, never yours or a bot’s. The count goes once the PR is merged or closed. Clicking the chip opens the PR"
         />
       </Section>
 
@@ -153,10 +206,11 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
           <Row
             key={entry.label}
             left={
-              <span className="flex w-full justify-center">
+              <span className="inline-flex items-center gap-2">
                 <span
                   className={cn('size-2.5 rounded-full', entry.dot, entry.pulse && 'animate-blip')}
                 />
+                <span className="text-ui font-medium capitalize">{entry.kind}</span>
               </span>
             }
             right={entry.label}

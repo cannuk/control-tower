@@ -83,6 +83,14 @@ export function Overlay({
   )
 }
 
+/**
+ * A titled group of rows.
+ *
+ * The heading sits on a rule that runs the width of the panel, which is what separates
+ * one group from the next at a glance. Before, four sections of definitions ran
+ * together as one column of evenly spaced lines — nothing marked where PULL REQUEST
+ * STATUS ended and BOARDS began except a slightly bolder line of text.
+ */
 export function Section({
   title,
   children,
@@ -91,21 +99,45 @@ export function Section({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <section className="mb-5 last:mb-0">
-      <h3 className="field text-text-subtle mb-2 text-footnote font-semibold tracking-widest">
+    <section className="mt-6 first:mt-0">
+      <h3 className="field text-text-muted border-border-strong mb-1 border-b pb-1.5 text-footnote font-semibold tracking-widest">
         {title}
       </h3>
-      <div className="flex flex-col gap-2">{children}</div>
+      <div className="flex flex-col">{children}</div>
     </section>
   )
 }
 
-/** A labelled row: fixed-width left column, explanation on the right. */
+/**
+ * A sub-heading inside a section, for grouping rows that belong together.
+ *
+ * Thirteen pull-request statuses in one flat list is an alphabet to be read rather
+ * than a vocabulary to be scanned. Grouped into the phases a PR actually passes
+ * through, the same thirteen become five short lists.
+ */
+export function Subhead({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <p className="text-text-subtle mt-4 mb-1 text-footnote">{children}</p>
+}
+
+/**
+ * A labelled row: fixed-width term column, explanation on the right.
+ *
+ * The hairline is what gives a long list rhythm — it lets the eye track across from a
+ * chip to its meaning without counting lines, and it makes a wrapped two-line
+ * definition obviously one entry rather than two. Suppressed on the first row of a
+ * group, where the section rule or subhead is already the boundary.
+ *
+ * The term column is 10.5rem because the widest chip needs it. At 8.5rem the longest
+ * labels had nowhere to go and broke across two lines inside the chip — NEEDS
+ * RE-REVIEW measures about 158px with its icon and padding, against the 136px it was
+ * given. Nothing on a strip ever wraps, so a key that wraps is showing you something
+ * the app does not have.
+ */
 export function Row({ left, right }: { left: React.ReactNode; right: string }): React.JSX.Element {
   return (
-    <div className="flex items-start gap-3">
-      <span className="flex w-[7.5rem] shrink-0 justify-start">{left}</span>
-      <span className="text-text-muted min-w-0 flex-1 text-ui leading-snug">{right}</span>
+    <div className="border-scope-line flex items-start gap-4 border-t py-2 first:border-t-0">
+      <span className="flex w-[10.5rem] shrink-0 justify-start pt-px">{left}</span>
+      <span className="text-text-muted min-w-0 flex-1 text-ui leading-relaxed">{right}</span>
     </div>
   )
 }
