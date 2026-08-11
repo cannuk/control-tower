@@ -21,14 +21,24 @@ import { cn } from '../lib/utils.js'
  * Clicking opens the PR — the chip is the link, so the flight number stays
  * actionable rather than decorative.
  */
-export function StatusChip({ prRef }: { prRef: PrRef }): React.JSX.Element {
+export function StatusChip({
+  prRef,
+  onOpen,
+}: {
+  prRef: PrRef
+  /** Called alongside opening GitHub, so reading the PR counts as reading the row. */
+  onOpen?: () => void
+}): React.JSX.Element {
   const { label, chip, Icon, inProgress } = PR_STATUS[prRef.status]
   const advisories = chipAdvisories(prRef)
 
   return (
     <button
       type="button"
-      onClick={() => void window.controlTower.openExternal(prRef.url)}
+      onClick={() => {
+        onOpen?.()
+        void window.controlTower.openExternal(prRef.url)
+      }}
       title={prTooltip(prRef)}
       className={cn(
         'no-drag field inline-flex items-center gap-1.5 rounded px-2.5 py-1.5',

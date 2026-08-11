@@ -80,17 +80,30 @@ export function FlightStrip({
    * re-resolves by session id on every call, and falls back to resuming the
    * session when no tab is live at all.
    */
+  /**
+   * Mark this row seen. Any deliberate interaction counts.
+   *
+   * Opening the terminal, opening the PR on GitHub, or clicking the dot all mean the
+   * same thing: you have dealt with this row. Tuning used to be the only one, and
+   * only when it succeeded — so a session running under VS Code, which cannot be
+   * focused, kept its dot lit no matter how many times you clicked it and read the
+   * reason why.
+   *
+   * Synthetic pull-request rows are skipped: they have no transcript, so they can
+   * never be unread, and a mark would only add a row keyed on an id no session owns.
+   */
+  async function seen(): Promise<void> {
+    if (session.origin !== 'session') return
+    await window.controlTower.markRead(session.sessionId, session.lastContact)
+  }
+
   async function tune(): Promise<void> {
     setTuneError(null)
+    // Before the attempt, not after it. Whether cmux can find a tab is unrelated to
+    // whether you have looked at the row.
+    await seen()
     const result = await window.controlTower.tune(session.sessionId, session.cwd)
-    if (!result.ok) {
-      setTuneError(result.reason)
-      return
-    }
-    // Opening the terminal is what "viewing" means here — there is no detail view to
-    // read inside Control Tower. Only on success: a tune that failed showed you
-    // nothing, so dismissing the activity would lose it.
-    await window.controlTower.markRead(session.sessionId, session.lastContact)
+    if (!result.ok) setTuneError(result.reason)
   }
 
   return (
@@ -253,7 +266,7 @@ export function FlightStrip({
               .sort((a, b) => (a.number === lead?.number ? -1 : b.number === lead?.number ? 1 : 0))
               .map((prRef) => (
                 <span key={prRef.number} className="inline-flex items-center gap-1.5">
-                  <StatusChip prRef={prRef} />
+                  <StatusChip prRef={prRef} onOpen={() => void seen()} />
                   {/*
                     Only on a closed PR that a bot closed — the ones you closed
                     yourself have already left the board. This is the override for

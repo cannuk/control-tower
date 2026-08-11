@@ -252,10 +252,16 @@ export async function collect(): Promise<SessionSnapshot> {
     })
   }
 
-  // Anything we have never seen before starts read, from this moment on.
+  /**
+   * Anything we have never seen before starts read, from this moment on.
+   *
+   * Real sessions only. A pull-request row has no transcript to grow, so it can never
+   * become unread, and seeding one just accumulates rows keyed on an id that no
+   * session owns.
+   */
   cache.seedRead(
     sessions
-      .filter((s) => !readMarks.has(s.sessionId))
+      .filter((s) => s.origin === 'session' && !readMarks.has(s.sessionId))
       .map((s) => ({ sessionId: s.sessionId, lastContact: s.lastContact })),
   )
 
