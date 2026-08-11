@@ -196,3 +196,78 @@
 
   --ct-scope-line: oklch(20% 0.024 55);
 }
+
+/*
+ * Green phosphor CRT — the other tube, and the same canary as `amber-sector`.
+ *
+ * Built to the same rule: near-monochrome, so hue carries almost nothing and the
+ * luminance ladder plus the icon and label do the work. Every status is a shade of
+ * P1 green, spanning yellow-green at the bright end to blue-green at the dim end —
+ * the same 32 degrees of hue amber spends, moved down the wheel. ALERT is the one
+ * break, exactly as on a real console.
+ *
+ * The ladder is the load-bearing part, and it is ordered rather than merely distinct:
+ *   cleared 90 > live 89 > accent 85 > approach 83 > caution 78 > inbound 70
+ *   > holding 66 > landed 60 > dormant 47 > lost 33
+ * Brightest reads as most urgent, dimmest as least live. `landed` sits at 60 for that
+ * reason and not for contrast — dropping it to 50 would have bought a better chip
+ * ratio and collided with `dormant` at 47, which in a palette with no hue to spare
+ * would erase the difference between "shipped" and "no live data".
+ *
+ * Contrast measured through oklch -> linear sRGB -> WCAG, every value in gamut. Body
+ * text 15.6:1 / 9.2:1 / 5.3:1 on --ct-bg. Chips against their own foreground: cleared
+ * 15.7, approach 12.5, caution 10.4, advisory 10.6, inbound 7.9, landed 5.3, dormant
+ * 5.2, alert 4.7 — each at or above the equivalent in `amber-sector`, and alert and
+ * landed clear the 4.5:1 floor that the amber pair (3.7 and 4.0) does not.
+ */
+[data-theme='green-phosphor'] {
+  color-scheme: dark;
+
+  --ct-bg: oklch(13.5% 0.02 155);
+  --ct-surface: oklch(16.5% 0.026 155);
+  --ct-surface-raised: oklch(22.5% 0.034 155);
+  --ct-border: oklch(28% 0.042 152);
+  --ct-border-strong: oklch(42% 0.07 150);
+
+  /* 15.6:1, 9.2:1, 5.3:1 on --ct-bg */
+  --ct-text: oklch(90% 0.16 145);
+  --ct-text-muted: oklch(74% 0.15 145);
+  --ct-text-subtle: oklch(60% 0.12 143);
+
+  --ct-accent: oklch(85% 0.18 148);
+  --ct-accent-fg: oklch(13.5% 0.02 155);
+  --ct-ring: oklch(85% 0.18 148);
+
+  /* Differentiated by luminance, not hue — brightest reads as most urgent. */
+  --ct-cleared: oklch(90% 0.19 142);
+  --ct-cleared-fg: oklch(13.5% 0.02 155);
+  --ct-caution: oklch(78% 0.16 128);
+  --ct-caution-fg: oklch(13.5% 0.02 155);
+  --ct-alert: oklch(56% 0.21 30); /* the one hue break */
+  --ct-alert-fg: oklch(97% 0.012 30);
+  --ct-inbound: oklch(70% 0.13 158);
+  --ct-inbound-fg: oklch(13.5% 0.02 155);
+  --ct-approach: oklch(83% 0.17 146);
+  --ct-approach-fg: oklch(13.5% 0.02 155);
+  /* Dark text on a mid fill, unlike the amber equivalent's light text on a dim one.
+   * That is what lets this stay at L=60 — bright enough to hold the rung above
+   * dormant, dark enough to read at 5.3:1. */
+  --ct-landed: oklch(60% 0.1 162);
+  --ct-landed-fg: oklch(13.5% 0.02 155);
+  --ct-dormant: oklch(47% 0.05 155);
+  --ct-dormant-fg: oklch(90% 0.16 145);
+
+  --ct-squawk-live: oklch(89% 0.19 145);
+  /* Near-monochrome, so hue cannot separate these three at all — luminance does.
+   * Working is brightest, waiting sits between, no-contact is nearly out. */
+  --ct-squawk-holding: oklch(66% 0.14 132);
+  --ct-squawk-lost: oklch(33% 0.04 155);
+
+  /* Same reasoning as the amber pair: hue cannot carry this distinction, so the
+   * solid state is a bright chip with dark text and this is a dark chip with bright
+   * text in the same family. 10.6:1. */
+  --ct-cleared-advisory: oklch(26% 0.06 148);
+  --ct-cleared-advisory-fg: oklch(86% 0.17 148);
+
+  --ct-scope-line: oklch(19.5% 0.028 155);
+}

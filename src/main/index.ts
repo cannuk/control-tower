@@ -102,19 +102,28 @@ const store = new Store<Prefs>({
 let win: BrowserWindow | null = null
 
 /**
- * The native window paints before the renderer stylesheet loads, so this has to
- * approximate each palette's --ct-bg. A mismatch shows as a flash on launch and
- * again on every display-mode change. Keep in sync with tokens.css by eye —
- * there is no way to read a CSS custom property from the main process.
+ * The native window paints before the renderer stylesheet loads, so this has to match
+ * each palette's --ct-bg. A mismatch shows as a flash on launch and again on every
+ * display-mode change. There is no way to read a CSS custom property from the main
+ * process, so these are kept in sync with tokens.css by hand.
+ *
+ * Converted, not eyeballed. The previous values were estimated and every one of them
+ * was too light — `amber-sector` was #191410 against an actual background of #0f0704,
+ * and `night-scope` #111619 against #050d0d — so the code written to prevent a launch
+ * flash was causing a visible one. These come from running each oklch triple through
+ * linear sRGB, a conversion checked against oklch(62.8% 0.258 29.23) landing exactly
+ * on #ff0000.
  */
 function firstPaint(theme: ThemeName): string {
   switch (theme) {
     case 'day-cab':
-      return '#f5f7f8'
+      return '#f1f6f6'
     case 'amber-sector':
-      return '#191410'
+      return '#0f0704'
+    case 'green-phosphor':
+      return '#030a05'
     default:
-      return '#111619'
+      return '#050d0d'
   }
 }
 

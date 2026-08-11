@@ -14,19 +14,21 @@
  * Dressing those up would hide information rather than compress it.
  */
 
-export const THEMES = ['night-scope', 'day-cab', 'amber-sector'] as const
+export const THEMES = ['night-scope', 'day-cab', 'amber-sector', 'green-phosphor'] as const
 export type ThemeName = (typeof THEMES)[number]
 
 export const THEME_LABELS: Record<ThemeName, string> = {
   'night-scope': 'Night Scope',
   'day-cab': 'Day Cab',
   'amber-sector': 'Amber Sector',
+  'green-phosphor': 'Green Phosphor',
 }
 
 export const THEME_HINTS: Record<ThemeName, string> = {
   'night-scope': 'Dark radar scope — the default',
   'day-cab': 'Daylight in the tower cabin',
   'amber-sector': 'Amber phosphor CRT, near-monochrome',
+  'green-phosphor': 'Green phosphor CRT, near-monochrome',
 }
 
 /**
