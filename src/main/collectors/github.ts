@@ -257,7 +257,7 @@ async function discoverAuthored(gh: string): Promise<string[]> {
  * GitHub outage or a logged-out `gh` should leave the board showing last-known
  * state rather than taking the app down.
  */
-export async function refresh(): Promise<string[]> {
+export async function refresh(options: { force?: boolean } = {}): Promise<string[]> {
   const gh = findGh()
   if (!gh) return ['gh CLI not found — PR status unavailable']
 
@@ -265,7 +265,7 @@ export async function refresh(): Promise<string[]> {
   // rather than a minute later.
   const warnings = await discoverAuthored(gh)
 
-  const wanted = cache.prsNeedingRefresh()
+  const wanted = cache.prsNeedingRefresh(Date.now(), options.force)
   if (wanted.size === 0) return warnings
 
   let payload: { data?: Record<string, Record<string, GraphQlPr | null> | null> }

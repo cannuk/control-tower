@@ -186,7 +186,10 @@ export const useStore = create<State>((set, get) => ({
   refresh: async (announce = true) => {
     set((s) => ({ loading: true, scanId: announce ? s.scanId + 1 : s.scanId }))
     try {
-      const snapshot = await window.controlTower.getSnapshot()
+      // `announce` doubles as "a person asked for this", which is also exactly when
+      // PR status is worth re-fetching. The silent startup sweep skips it so the
+      // first paint does not wait on the network.
+      const snapshot = await window.controlTower.getSnapshot(announce)
       set({ snapshot, loading: false, error: null })
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })

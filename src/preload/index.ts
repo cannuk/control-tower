@@ -11,7 +11,8 @@ const api = {
   setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke('prefs:setTheme', theme),
   getBoard: (): Promise<Board> => ipcRenderer.invoke('prefs:getBoard'),
   setBoard: (board: Board): Promise<void> => ipcRenderer.invoke('prefs:setBoard', board),
-  getSnapshot: (): Promise<SessionSnapshot> => ipcRenderer.invoke('sessions:snapshot'),
+  getSnapshot: (refreshPrs = false): Promise<SessionSnapshot> =>
+    ipcRenderer.invoke('sessions:snapshot', refreshPrs),
   getTitling: (): Promise<boolean> => ipcRenderer.invoke('prefs:getTitling'),
   setTitling: (on: boolean): Promise<void> => ipcRenderer.invoke('prefs:setTitling', on),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),

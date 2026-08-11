@@ -277,7 +277,7 @@ const PR_STATUS_TTL_MS = 60_000
  * it would be known to exist and never have a status, so it would render as a row
  * with no chip and no sentence.
  */
-export function prsNeedingRefresh(now = Date.now()): Map<string, number[]> {
+export function prsNeedingRefresh(now = Date.now(), force = false): Map<string, number[]> {
   ensureAuthoredTable()
   const rows = open()
     .prepare(
@@ -292,7 +292,10 @@ export function prsNeedingRefresh(now = Date.now()): Map<string, number[]> {
           OR (s.terminal = 0 AND s.fetched_at < ?)
        ORDER BY k.repository, k.number`,
     )
-    .all(now - PR_STATUS_TTL_MS) as { repository: string; number: number }[]
+    // A forced sweep asks for everything unsettled regardless of when it was last
+    // fetched. Merged and closed PRs stay excluded either way: those cannot change,
+    // so refetching them would spend a query on a settled answer.
+    .all(force ? now : now - PR_STATUS_TTL_MS) as { repository: string; number: number }[]
 
   const byRepo = new Map<string, number[]>()
   for (const row of rows) {

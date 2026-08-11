@@ -32,7 +32,7 @@ export function TitleBar(): React.JSX.Element {
   // a native tooltip's hover delay turns into something you give up on before it
   // appears; the exact timestamp still rides along for when the age is ambiguous.
   const sweep = snapshot
-    ? `Sweep now — last swept ${elapsed(snapshot.sweptAt)} ago (${absoluteTime(snapshot.sweptAt)})`
+    ? `Sweep now — re-read sessions and refetch PR status. Last swept ${elapsed(snapshot.sweptAt)} ago (${absoluteTime(snapshot.sweptAt)})`
     : 'Sweep now — acquiring the first scan'
 
   return (

@@ -12,6 +12,7 @@ import {
 } from '../shared/types.js'
 import * as cmux from './providers/cmux.js'
 import { collect } from './collectors/snapshot.js'
+import { refresh as refreshGitHub } from './collectors/github.js'
 import { readRegistry } from './collectors/registry.js'
 import { parsePrSessionId } from './collectors/orphan-prs.js'
 import * as cacheStore from './store/cache.js'
@@ -241,7 +242,34 @@ ipcMain.handle('prefs:setTheme', (_e, theme: ThemeName) => {
 
 // Pull, for the initial paint and the manual sweep button. Live updates arrive
 // by push from the watcher instead — see watcher.start below.
-ipcMain.handle('sessions:snapshot', (): Promise<SessionSnapshot> => collect())
+/**
+ * A pull, for the initial paint and the sweep button. Live updates arrive by push
+ * from the watcher instead — see watcher.start below.
+ *
+ * `refreshPrs` is what separates the two callers. The sweep button means "tell me
+ * what is true now", and it used to rebuild the board entirely from cached PR status
+ * — so pressing it after pushing a commit, or when you suspected somebody had just
+ * reviewed something, could not tell you. The one moment you reach for it is the one
+ * moment the cache is most likely to be behind.
+ *
+ * Forced past the freshness window too, because a manual sweep that answers "the
+ * cache says this is still current" is answering a question nobody asked. One
+ * batched query costs a single rate-limit point, so the only cost is a second or
+ * two of latency on a button you pressed deliberately.
+ *
+ * Startup passes false: the first paint should be immediate, and the watcher fires
+ * its own GitHub poll moments later.
+ */
+ipcMain.handle('sessions:snapshot', async (_e, refreshPrs = false): Promise<SessionSnapshot> => {
+  if (refreshPrs === true) {
+    const warnings = await refreshGitHub({ force: true })
+    const snapshot = await collect()
+    // Surfaced rather than swallowed: a logged-out `gh` should say so on the sweep
+    // you pressed, not silently serve stale chips.
+    return { ...snapshot, warnings: [...snapshot.warnings, ...warnings] }
+  }
+  return collect()
+})
 
 /**
  * Tune to a session — bring its terminal to the front.
