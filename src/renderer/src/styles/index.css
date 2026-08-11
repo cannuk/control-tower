@@ -14,6 +14,18 @@
   --color-border-base: var(--ct-border);
   --color-border-strong: var(--ct-border-strong);
   --color-scope-line: var(--ct-scope-line);
+  /*
+   * The modal scrim, with its alpha baked into the token rather than applied as a
+   * utility modifier.
+   *
+   * `bg-bg/60` looks like it works and does not: an alpha modifier on an `@theme
+   * inline` colour whose value is a bare `var()` is silently dropped, so Tailwind
+   * emitted `background-color: var(--ct-bg)` — fully opaque. The overlay had carried
+   * `bg-bg/80` since it was written and had never once been translucent, which is why
+   * its backdrop-blur appeared to do nothing: there was nothing showing through to
+   * blur. Alpha in the token is the form that survives.
+   */
+  --color-scrim: var(--ct-scrim);
 
   --color-text: var(--ct-text);
   --color-text-muted: var(--ct-text-muted);
@@ -48,6 +60,17 @@
    * rather than reading each row. Prose (the flight description) stays
    * proportional — monospacing a full sentence hurts more than it helps. */
   --font-data: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  /*
+   * The title bar's height, shared rather than repeated.
+   *
+   * Two places need the same number and for opposite reasons: the bar sets it, and the
+   * overlays have to clear it. macOS draws the traffic lights inside this bar and they
+   * are native widgets composited above the web view, so they neither blur nor scroll
+   * with a panel — a panel that starts near the top of the window ends up underneath
+   * them, which is what this exists to prevent.
+   */
+  --spacing-titlebar: 68px;
 
   /*
    * The type scale, four steps, named for the job rather than the pixel count.

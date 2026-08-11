@@ -24,17 +24,49 @@ export function Overlay({
 }): React.JSX.Element {
   return (
     <div
-      className="bg-bg/80 absolute inset-0 z-20 overflow-y-auto backdrop-blur-sm"
+      /*
+       * A modal scrim over the boards, starting below the title bar.
+       *
+       * Two things come out of stopping at `top-titlebar` rather than covering the
+       * window. The traffic lights stop being a problem by construction: macOS
+       * composites them above the web view, so they stay sharp and on top of anything
+       * drawn underneath, and the panel used to run directly beneath them at its old
+       * 12px margin. And the header stays crisp and live, so KEY and PREFS still toggle
+       * and the mark still reads — the chrome is what tells you the window is still
+       * there with a panel over it, which a blurred header would not.
+       *
+       * The scrim is also translucent for the first time. It carried `bg-bg/80` since
+       * it was written, which never applied any alpha at all — an opacity modifier on an
+       * `@theme inline` colour whose value is a bare `var()` is silently dropped, so it
+       * compiled to a fully opaque background. That is why its `backdrop-blur` appeared
+       * to do nothing: there was never anything showing through to blur. The alpha lives
+       * in `--ct-scrim` now, per palette, which is the form that survives.
+       */
+      className="bg-scrim top-titlebar absolute inset-x-0 bottom-0 z-20 overflow-y-auto p-4 backdrop-blur-md"
       onClick={onClose}
     >
       <div
-        className="bg-surface border-border-strong m-3 rounded-lg border p-4 shadow-2xl"
+        /*
+         * Inset on every side, so the blurred boards frame the panel instead of it
+         * running to the window edges, and capped in width.
+         *
+         * The cap is about the line length, not the look. These panels are mostly
+         * definitions — a term and a sentence explaining it — and at a 1512px window
+         * the sentences ran past 150 characters, which is roughly twice what anyone
+         * reads comfortably and the main reason the key felt dense rather than long.
+         * `mx-auto` centres it once the window is wider than the cap.
+         *
+         * The inset is the scrim's padding rather than a margin here: a margin plus
+         * `mx-auto` cancel each other, so the panel would have touched both edges on any
+         * window narrower than the cap — exactly the case the inset is for.
+         */
+        className="bg-surface border-border-strong mx-auto max-w-[44rem] rounded-lg border p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="field text-ui font-semibold tracking-widest">{title}</h2>
-            <p className="text-text-subtle mt-1 text-ui">{subtitle}</p>
+            <h2 className="field text-prose font-semibold tracking-widest">{title}</h2>
+            <p className="text-text-subtle mt-1 text-ui leading-relaxed">{subtitle}</p>
           </div>
           <button
             type="button"

@@ -17,7 +17,8 @@ import { useStore } from '../store.js'
  * the freshness figure moved into the tooltip of the button that controls it, where
  * it is next to the action it describes rather than competing with the app name.
  *
- * 68px tall rather than 56: this bar is the app's chrome and its only branding, and
+ * 68px tall rather than 56 (--spacing-titlebar, shared with the overlays, which have
+ * to clear it): this bar is the app's chrome and its only branding, and
  * at the old height it read as a row of buttons sitting above the boards instead of
  * as the top of a console. The height is what lets the mark be 32px.
  *
@@ -36,7 +37,7 @@ export function TitleBar(): React.JSX.Element {
     : 'Sweep now — acquiring the first scan'
 
   return (
-    <header className="drag-region border-border-base flex h-[68px] shrink-0 items-center gap-3 border-b pr-4 pl-24">
+    <header className="drag-region border-border-base flex h-titlebar shrink-0 items-center gap-3 border-b pr-4 pl-24">
       <TowerMark size={32} className="shrink-0" />
       {/*
         min-w-0 and truncate, because a flex item defaults to min-width:auto and so

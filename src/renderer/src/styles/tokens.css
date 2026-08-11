@@ -89,6 +89,9 @@
   --ct-cleared-advisory: oklch(30% 0.055 148);
   --ct-cleared-advisory-fg: oklch(86% 0.14 145);
 
+  /* Modal scrim — the bg colour with its own alpha. See the note in index.css. */
+  --ct-scrim: oklch(15% 0.014 200 / 0.62);
+
   /* Strip rack — the horizontal bands rows are drawn as */
   --ct-scope-line: oklch(22% 0.016 200);
 }
@@ -140,6 +143,9 @@
    * is not the weaker of the two here. */
   --ct-cleared-advisory: oklch(93% 0.05 148);
   --ct-cleared-advisory-fg: oklch(37% 0.12 148);
+
+  /* Light polarity, so the scrim lightens rather than darkens what it covers. */
+  --ct-scrim: oklch(97% 0.005 200 / 0.66);
 
   --ct-scope-line: oklch(93% 0.008 200);
 }
@@ -193,6 +199,8 @@
    * dark chip with bright text, same hue family. 9.5:1. */
   --ct-cleared-advisory: oklch(27% 0.055 70);
   --ct-cleared-advisory-fg: oklch(85% 0.13 82);
+
+  --ct-scrim: oklch(14% 0.018 55 / 0.62);
 
   --ct-scope-line: oklch(20% 0.024 55);
 }
@@ -268,6 +276,8 @@
    * text in the same family. 10.6:1. */
   --ct-cleared-advisory: oklch(26% 0.06 148);
   --ct-cleared-advisory-fg: oklch(86% 0.17 148);
+
+  --ct-scrim: oklch(13.5% 0.02 155 / 0.62);
 
   --ct-scope-line: oklch(19.5% 0.028 155);
 }
