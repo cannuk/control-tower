@@ -90,7 +90,7 @@ export function App(): React.JSX.Element {
 
       <main className="min-h-0 flex-1 overflow-y-auto">
         {error && (
-          <p className="text-alert field px-3 py-4 text-[11px]">
+          <p className="text-alert field px-3 py-4 text-ui">
             SCOPE FAILURE — could not read sessions: {error}
           </p>
         )}
@@ -112,21 +112,21 @@ export function App(): React.JSX.Element {
         {/* Named, not silently dropped. A bounded board that admits its bound is
             honest; one that just stops is lossy and you cannot tell. */}
         {folded > 0 && (
-          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
+          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-footnote">
             {folded} EARLIER SESSION{folded === 1 ? '' : 'S'} FOLDED IN — ALREADY REPRESENTED BY THE
             ROW FOR {folded === 1 ? 'ITS' : 'THEIR'} PULL REQUEST
           </p>
         )}
 
         {board !== 'departures' && trimmed[BOARD_KEY[board]] > 0 && (
-          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
+          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-footnote">
             {trimmed[BOARD_KEY[board]]} MORE NOT SHOWN — THIS BOARD IS SET TO HOLD {strips.length}.
             RAISE IT IN PREFERENCES.
           </p>
         )}
 
         {board === 'landed' && olderCount > 0 && (
-          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
+          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-footnote">
             {olderCount} SESSION{olderCount === 1 ? '' : 'S'} OFF THE BOARDS — NOT IN FLIGHT,
             NOTHING IN REVIEW, NOTHING SHIPPED RECENTLY
           </p>
@@ -134,7 +134,7 @@ export function App(): React.JSX.Element {
       </main>
 
       {snapshot && snapshot.warnings.length > 0 && (
-        <footer className="border-border-base text-caution field shrink-0 border-t px-2.5 py-1 text-[10px]">
+        <footer className="border-border-base text-caution field shrink-0 border-t px-2.5 py-1 text-footnote">
           {snapshot.warnings.length} ADVISORY FROM LAST SWEEP
         </footer>
       )}
@@ -200,8 +200,8 @@ function Placeholder({
   return (
     <div className="text-text-subtle flex flex-col items-center gap-2 px-6 py-16 text-center">
       {icon}
-      <p className="field text-text-muted text-[11px] font-semibold tracking-wider">{title}</p>
-      <p className="max-w-[22rem] text-[11px]">{body}</p>
+      <p className="field text-text-muted text-ui font-semibold tracking-wider">{title}</p>
+      <p className="max-w-[22rem] text-ui">{body}</p>
     </div>
   )
 }

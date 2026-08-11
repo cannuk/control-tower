@@ -99,7 +99,15 @@ interface Prefs {
 
 const store = new Store<Prefs>({
   defaults: {
-    bounds: { width: 460, height: 720 },
+    /**
+     * 540 wide rather than 460, because the chrome outgrew it.
+     *
+     * The type scale went up two points and the mark to 32px, which puts "CONTROL
+     * TOWER" at roughly 146px against the 147px the title bar had spare at 460 — a
+     * fresh window would have opened with its own name truncated. Only first runs see
+     * this; an existing window keeps whatever bounds you last left it at.
+     */
+    bounds: { width: 540, height: 720 },
     theme: 'night-scope',
     boardLimits: DEFAULT_BOARD_LIMITS,
     // APPROACH by default: on a first run the useful question is who is waiting on

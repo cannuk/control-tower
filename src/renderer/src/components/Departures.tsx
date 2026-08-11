@@ -39,10 +39,10 @@ export function Departures(): React.JSX.Element {
       {departures.length === 0 ? (
         <div className="text-text-subtle flex flex-col items-center gap-2 px-6 py-14 text-center">
           <PlaneTakeoff size={20} aria-hidden />
-          <p className="field text-text-muted text-[11px] font-semibold tracking-wider">
+          <p className="field text-text-muted text-ui font-semibold tracking-wider">
             NOTHING FILED
           </p>
-          <p className="max-w-[24rem] text-[11px]">
+          <p className="max-w-[24rem] text-ui">
             File the next thing you intend to pick up. Launching it opens a terminal in the
             directory you choose and starts a session with the plan as its prompt.
           </p>
@@ -126,7 +126,7 @@ function FilePlan(): React.JSX.Element {
           if (e.key === 'Escape') setOpen(false)
         }}
         placeholder="File a flight plan — what do you want to pick up next?"
-        className="bg-surface border-border-base focus:border-accent w-full rounded border px-3 py-2.5 text-[12px] outline-none"
+        className="bg-surface border-border-base focus:border-accent w-full rounded border px-3 py-2.5 text-prose outline-none"
       />
 
       {open && (
@@ -136,7 +136,7 @@ function FilePlan(): React.JSX.Element {
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Detail, links, constraints — sent to the session after the title (optional)"
             rows={3}
-            className="bg-surface border-border-base focus:border-accent w-full resize-y rounded border px-3 py-2 text-[12px] leading-relaxed outline-none"
+            className="bg-surface border-border-base focus:border-accent w-full resize-y rounded border px-3 py-2 text-prose leading-relaxed outline-none"
           />
 
           <div className="flex items-center gap-2">
@@ -144,22 +144,20 @@ function FilePlan(): React.JSX.Element {
               type="button"
               onClick={() => void window.controlTower.chooseDirectory().then((d) => d && setCwd(d))}
               title="Where the session should run"
-              className="border-border-base hover:bg-surface-raised text-text-muted hover:text-text inline-flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-[11px]"
+              className="border-border-base hover:bg-surface-raised text-text-muted hover:text-text inline-flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-ui"
             >
               <FolderOpen size={12} aria-hidden />
               {cwd ? 'Change directory' : 'Choose directory'}
             </button>
 
-            {cwd && (
-              <span className="field text-text-subtle min-w-0 truncate text-[11px]">{cwd}</span>
-            )}
+            {cwd && <span className="field text-text-subtle min-w-0 truncate text-ui">{cwd}</span>}
 
             <button
               type="button"
               onClick={() => void file()}
               disabled={title.trim().length === 0}
               className={cn(
-                'field ml-auto rounded px-3 py-1.5 text-[11px] font-semibold tracking-wider',
+                'field ml-auto rounded px-3 py-1.5 text-ui font-semibold tracking-wider',
                 title.trim().length === 0
                   ? 'bg-dormant text-dormant-fg opacity-50'
                   : 'bg-accent text-accent-fg hover:opacity-85',
@@ -266,7 +264,7 @@ function PlanStrip({
         >
           <GripVertical size={13} aria-hidden />
         </span>
-        <span className="field text-text-subtle text-[11px]">PLAN</span>
+        <span className="field text-text-subtle text-ui">PLAN</span>
       </div>
 
       <div className="min-w-0 flex-1">
@@ -281,21 +279,19 @@ function PlanStrip({
                 if (e.key === 'Enter') void commit()
                 if (e.key === 'Escape') setEditing(null)
               }}
-              className="bg-surface border-accent min-w-0 flex-1 rounded border px-2 py-1 text-[14px] leading-6 font-medium outline-none"
+              className="bg-surface border-accent min-w-0 flex-1 rounded border px-2 py-1 text-headline leading-6 font-medium outline-none"
             />
           ) : (
             <button
               type="button"
               onClick={() => open('title')}
               title="Click to rename"
-              className="hover:bg-surface min-w-0 flex-1 cursor-text rounded px-2 py-1 -mx-2 text-left text-[14px] leading-6 font-medium transition-colors"
+              className="hover:bg-surface min-w-0 flex-1 cursor-text rounded px-2 py-1 -mx-2 text-left text-headline leading-6 font-medium transition-colors"
             >
               {item.title}
             </button>
           )}
-          <span className="field text-text-subtle shrink-0 text-[11px]">
-            {elapsed(item.createdAt)}
-          </span>
+          <span className="field text-text-subtle shrink-0 text-ui">{elapsed(item.createdAt)}</span>
         </div>
 
         {editing === 'notes' ? (
@@ -311,7 +307,7 @@ function PlanStrip({
             }}
             rows={Math.min(8, Math.max(3, draft.split('\n').length + 1))}
             placeholder="Detail, links, constraints — sent to the session after the title"
-            className="bg-surface border-accent mt-2.5 w-full resize-y rounded border px-2 py-1.5 text-[12px] leading-relaxed outline-none"
+            className="bg-surface border-accent mt-2.5 w-full resize-y rounded border px-2 py-1.5 text-prose leading-relaxed outline-none"
           />
         ) : (
           <button
@@ -320,7 +316,7 @@ function PlanStrip({
             title="Click to edit the detail"
             className={cn(
               'hover:bg-surface mt-2.5 block w-full cursor-text rounded px-2 py-1 -mx-2 text-left',
-              'text-[12px] leading-relaxed whitespace-pre-wrap transition-colors',
+              'text-prose leading-relaxed whitespace-pre-wrap transition-colors',
               item.notes ? 'text-text-muted' : 'text-text-subtle italic',
             )}
           >
@@ -333,7 +329,7 @@ function PlanStrip({
         {/* The directory is shown as a control, not a field, because it is the one
             thing that must be set before this row can do anything. An unset cwd is
             offered as the fix rather than reported as a gap. */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-prose">
           <button
             type="button"
             onClick={() => void chooseDirectory()}
@@ -352,7 +348,7 @@ function PlanStrip({
         </div>
 
         {error && (
-          <p className="text-caution mt-2.5 flex items-start gap-1.5 text-[12px] leading-snug">
+          <p className="text-caution mt-2.5 flex items-start gap-1.5 text-prose leading-snug">
             <TriangleAlert size={12} className="mt-0.5 shrink-0" aria-hidden />
             {error}
           </p>

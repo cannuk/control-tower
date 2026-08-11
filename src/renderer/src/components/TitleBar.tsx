@@ -19,7 +19,7 @@ import { useStore } from '../store.js'
  *
  * 68px tall rather than 56: this bar is the app's chrome and its only branding, and
  * at the old height it read as a row of buttons sitting above the boards instead of
- * as the top of a console. The height is what lets the mark be 26px.
+ * as the top of a console. The height is what lets the mark be 32px.
  *
  * `pl-24` rather than `pl-20`, because the left inset is not decoration — macOS draws
  * the traffic lights inside this bar (`titleBarStyle: 'hiddenInset'`) and they end
@@ -37,8 +37,16 @@ export function TitleBar(): React.JSX.Element {
 
   return (
     <header className="drag-region border-border-base flex h-[68px] shrink-0 items-center gap-3 border-b pr-4 pl-24">
-      <TowerMark size={26} className="shrink-0" />
-      <h1 className="field flex-1 text-[12px] font-semibold tracking-widest">CONTROL TOWER</h1>
+      <TowerMark size={32} className="shrink-0" />
+      {/*
+        min-w-0 and truncate, because a flex item defaults to min-width:auto and so
+        refuses to shrink below its text. At the window's 380px minimum the wordmark
+        would otherwise push the three buttons off the right edge rather than give up
+        any of itself.
+      */}
+      <h1 className="field min-w-0 flex-1 truncate text-headline font-semibold tracking-widest">
+        CONTROL TOWER
+      </h1>
 
       <button
         type="button"
@@ -46,7 +54,7 @@ export function TitleBar(): React.JSX.Element {
         title="Strip marking key — what every term on a strip means"
         className="no-drag hover:bg-surface-raised text-text-muted hover:text-text rounded p-1.5 transition-colors"
       >
-        <span className="field text-[10px] font-semibold tracking-wider">KEY</span>
+        <span className="field text-footnote font-semibold tracking-wider">KEY</span>
       </button>
 
       <button
@@ -73,7 +81,7 @@ export function TitleBar(): React.JSX.Element {
         title="Preferences — summaries and display mode"
         className="no-drag hover:bg-surface-raised text-text-muted hover:text-text rounded p-1.5 transition-colors"
       >
-        <span className="field text-[10px] font-semibold tracking-wider">PREFS</span>
+        <span className="field text-footnote font-semibold tracking-wider">PREFS</span>
       </button>
     </header>
   )

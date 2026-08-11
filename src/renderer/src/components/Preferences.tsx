@@ -70,8 +70,8 @@ export function Preferences(): React.JSX.Element {
               aria-hidden
             />
             <span className="min-w-0">
-              <span className="block text-[12px] font-medium">{THEME_LABELS[name]}</span>
-              <span className="text-text-subtle block text-[11px] leading-tight">
+              <span className="block text-prose font-medium">{THEME_LABELS[name]}</span>
+              <span className="text-text-subtle block text-ui leading-tight">
                 {THEME_HINTS[name]}
               </span>
             </span>
@@ -89,7 +89,7 @@ export function Preferences(): React.JSX.Element {
             onChange={(limit) => void setBoardLimit(key, limit)}
           />
         ))}
-        <p className="text-text-subtle px-2 pt-1 text-[11px] leading-snug">
+        <p className="text-text-subtle px-2 pt-1 text-ui leading-snug">
           Anything a limit hides is counted at the foot of the board, never dropped silently.
           DEPARTURES is a list you wrote, so it is never trimmed.
         </p>
@@ -134,8 +134,8 @@ function Toggle({
         <span className={cn('block size-3 rounded-full', on ? 'bg-cleared-fg' : 'bg-dormant-fg')} />
       </span>
       <span className="min-w-0">
-        <span className="block text-[12px] font-medium">{label}</span>
-        <span className="text-text-subtle mt-0.5 block text-[11px] leading-snug">{body}</span>
+        <span className="block text-prose font-medium">{label}</span>
+        <span className="text-text-subtle mt-0.5 block text-ui leading-snug">{body}</span>
       </span>
     </button>
   )
@@ -200,10 +200,8 @@ function Limit({
   return (
     <label className="flex items-start justify-between gap-3 px-2 py-2">
       <span className="min-w-0">
-        <span className="field text-text block text-[11px] font-semibold tracking-wider">
-          {label}
-        </span>
-        <span className="text-text-subtle mt-0.5 block text-[11px] leading-snug">{hint}</span>
+        <span className="field text-text block text-ui font-semibold tracking-wider">{label}</span>
+        <span className="text-text-subtle mt-0.5 block text-ui leading-snug">{hint}</span>
       </span>
       <input
         type="number"
@@ -223,7 +221,7 @@ function Limit({
           const n = Number(next)
           if (Number.isInteger(n) && n >= BOARD_LIMIT_MIN && n <= BOARD_LIMIT_MAX) onChange(n)
         }}
-        className="field bg-surface-raised text-text ring-border focus-visible:ring-ring mt-0.5 w-16 shrink-0 rounded px-2 py-1 text-right text-[11px] ring-1 outline-none"
+        className="field bg-surface-raised text-text ring-border focus-visible:ring-ring mt-0.5 w-16 shrink-0 rounded px-2 py-1 text-right text-ui ring-1 outline-none"
       />
     </label>
   )

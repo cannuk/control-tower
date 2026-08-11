@@ -44,7 +44,7 @@ export function StripAction({
       )}
     >
       <Icon size={12} aria-hidden />
-      <span className="field text-[10px] font-semibold tracking-wider">{label}</span>
+      <span className="field text-footnote font-semibold tracking-wider">{label}</span>
     </button>
   )
 }

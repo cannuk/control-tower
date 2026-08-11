@@ -48,6 +48,26 @@
    * rather than reading each row. Prose (the flight description) stays
    * proportional — monospacing a full sentence hurts more than it helps. */
   --font-data: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  /*
+   * The type scale, four steps, named for the job rather than the pixel count.
+   *
+   * These replace fifty-odd `text-[11px]`-style literals scattered across the
+   * components. That spread was the actual problem: nudging the whole app up two
+   * points meant finding every one of them and keeping four separate sizes in step by
+   * hand, which is not a thing anyone does correctly twice.
+   *
+   * Every step moved up by exactly two points, so the relative scale is unchanged —
+   * the same four sizes in the same relationships, just further from the floor of what
+   * is comfortable on a 5K display. Tune the app's density here and nowhere else.
+   *
+   * No line-heights are paired with these on purpose: the components set their own
+   * `leading-*`, and pairing one here would silently override those.
+   */
+  --text-footnote: 12px; /* board footers, the smallest annotations — was 10 */
+  --text-ui: 13px; /* the workhorse: strip fields, hints, squawk — was 11 */
+  --text-prose: 14px; /* readable body: notes, inputs, section headings — was 12 */
+  --text-headline: 16px; /* the row headline, and titles you can edit — was 14 */
 }
 
 @layer base {

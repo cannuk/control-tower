@@ -2,7 +2,7 @@
  * The app mark, in the bar.
  *
  * The same geometry as `resources/icon.svg`, minus that file's 88% Dock inset —
- * here it should fill its box, because it sits beside 11px text rather than beside
+ * here it should fill its box, because it sits beside the wordmark rather than beside
  * other app icons.
  *
  * Full-colour, and unlike the radar that is defensible: this is the product's

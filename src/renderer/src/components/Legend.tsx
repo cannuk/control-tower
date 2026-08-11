@@ -102,7 +102,7 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
                 <span
                   className={cn(
                     'field inline-flex items-center gap-1.5 rounded px-2 py-1',
-                    'text-[11px] leading-none font-semibold',
+                    'text-ui leading-none font-semibold',
                     chip,
                   )}
                 >
@@ -116,7 +116,7 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
         })}
         <Row
           left={
-            <span className="field bg-cleared-advisory text-cleared-advisory-fg inline-flex items-center gap-1.5 rounded px-2 py-1 text-[11px] leading-none font-semibold">
+            <span className="field bg-cleared-advisory text-cleared-advisory-fg inline-flex items-center gap-1.5 rounded px-2 py-1 text-ui leading-none font-semibold">
               <span className="opacity-75">APPROVED</span>
               <span className="inline-flex items-center gap-1 border-l border-current/30 pl-2">
                 <ADVISORY_ICON size={10} strokeWidth={2.5} aria-hidden />
@@ -132,7 +132,7 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
         {BOARDS.map(([name, meaning]) => (
           <Row
             key={name}
-            left={<span className="field text-[11px] font-semibold">{name}</span>}
+            left={<span className="field text-ui font-semibold">{name}</span>}
             right={meaning}
           />
         ))}
@@ -142,7 +142,7 @@ export function Legend({ onClose }: { onClose: () => void }): React.JSX.Element 
         {MARKINGS.map(([name, meaning]) => (
           <Row
             key={name}
-            left={<span className="text-[11px] font-medium">{name}</span>}
+            left={<span className="text-ui font-medium">{name}</span>}
             right={meaning}
           />
         ))}

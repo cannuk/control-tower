@@ -33,8 +33,8 @@ export function Overlay({
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="field text-[11px] font-semibold tracking-widest">{title}</h2>
-            <p className="text-text-subtle mt-1 text-[11px]">{subtitle}</p>
+            <h2 className="field text-ui font-semibold tracking-widest">{title}</h2>
+            <p className="text-text-subtle mt-1 text-ui">{subtitle}</p>
           </div>
           <button
             type="button"
@@ -60,7 +60,7 @@ export function Section({
 }): React.JSX.Element {
   return (
     <section className="mb-5 last:mb-0">
-      <h3 className="field text-text-subtle mb-2 text-[10px] font-semibold tracking-widest">
+      <h3 className="field text-text-subtle mb-2 text-footnote font-semibold tracking-widest">
         {title}
       </h3>
       <div className="flex flex-col gap-2">{children}</div>
@@ -73,7 +73,7 @@ export function Row({ left, right }: { left: React.ReactNode; right: string }): 
   return (
     <div className="flex items-start gap-3">
       <span className="flex w-[7.5rem] shrink-0 justify-start">{left}</span>
-      <span className="text-text-muted min-w-0 flex-1 text-[11px] leading-snug">{right}</span>
+      <span className="text-text-muted min-w-0 flex-1 text-ui leading-snug">{right}</span>
     </div>
   )
 }

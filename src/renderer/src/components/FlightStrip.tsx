@@ -144,7 +144,7 @@ export function FlightStrip({
         )}
         <span
           title="Squawk — short handle for this session"
-          className="field text-text-subtle text-[11px]"
+          className="field text-text-subtle text-ui"
         >
           {squawk(session.sessionId)}
         </span>
@@ -156,14 +156,14 @@ export function FlightStrip({
             type="button"
             onClick={() => void tune()}
             title="Tune to this flight — bring its terminal to the front, or resume it"
-            className="no-drag hover:text-accent min-w-0 flex-1 cursor-pointer truncate text-left text-[14px] leading-6 font-medium"
+            className="no-drag hover:text-accent min-w-0 flex-1 cursor-pointer truncate text-left text-headline leading-6 font-medium"
           >
             {headline}
           </button>
 
           <span
             title={`Last contact ${absoluteTime(session.lastContact)}`}
-            className="field text-text-subtle shrink-0 text-[11px]"
+            className="field text-text-subtle shrink-0 text-ui"
           >
             {elapsed(session.lastContact)}
           </span>
@@ -206,9 +206,9 @@ export function FlightStrip({
             APPROACH from the PR's own review data, composed rather than generated
             (see shared/describe.ts). Deliberately allowed to wrap onto two lines
             rather than truncate — cut off mid-clause tells you less than nothing. */}
-        {state && <p className="text-text-muted mt-2.5 text-[12px] leading-relaxed">{state}</p>}
+        {state && <p className="text-text-muted mt-2.5 text-prose leading-relaxed">{state}</p>}
 
-        <div className="text-text-subtle mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]">
+        <div className="text-text-subtle mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-prose">
           <span className="inline-flex items-center gap-1.5" title="Origin">
             <MapPin size={12} aria-hidden />
             <span className="field">{session.project}</span>
@@ -224,7 +224,7 @@ export function FlightStrip({
         </div>
 
         {tuneError && (
-          <p className="text-caution mt-2.5 flex items-start gap-1.5 text-[12px] leading-snug">
+          <p className="text-caution mt-2.5 flex items-start gap-1.5 text-prose leading-snug">
             <TriangleAlert size={12} className="mt-0.5 shrink-0" aria-hidden />
             {tuneError}
           </p>
@@ -306,8 +306,8 @@ function Subtitle({
   title?: string
 }): React.JSX.Element {
   return (
-    <p className="text-text-subtle mt-2 flex items-baseline gap-2 text-[12px]" title={title}>
-      <span className="field shrink-0 text-[10px] tracking-wider opacity-60">{label}</span>
+    <p className="text-text-subtle mt-2 flex items-baseline gap-2 text-prose" title={title}>
+      <span className="field shrink-0 text-footnote tracking-wider opacity-60">{label}</span>
       <span className={cn('min-w-0 truncate', dim && 'opacity-45')}>{text}</span>
     </p>
   )

@@ -42,7 +42,7 @@ export function StatusChip({
       title={prTooltip(prRef)}
       className={cn(
         'no-drag field inline-flex items-center gap-1.5 rounded px-2.5 py-1.5',
-        'text-[11px] leading-none font-semibold',
+        'text-ui leading-none font-semibold',
         'transition-opacity hover:opacity-75',
         chip,
       )}
