@@ -7,7 +7,7 @@ import { Legend } from './components/Legend.js'
 import { Preferences } from './components/Preferences.js'
 import { Tabs } from './components/Tabs.js'
 import { TitleBar } from './components/TitleBar.js'
-import { sessionsOn, splitByBoard } from '../../shared/boards.js'
+import { sessionsOn, splitByBoard, type Boards } from '../../shared/boards.js'
 
 import { useStore } from './store.js'
 
@@ -23,6 +23,7 @@ export function App(): React.JSX.Element {
     subscribe,
     scanId,
     departures,
+    boardLimits,
   } = useStore()
 
   useEffect(() => {
@@ -52,8 +53,8 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [overlay, closeOverlay])
 
-  const boards = splitByBoard(snapshot)
-  const { enRoute, holding, approach, landed, olderCount, collapsed } = boards
+  const boards = splitByBoard(snapshot, boardLimits)
+  const { enRoute, holding, approach, landed, olderCount, collapsed, trimmed } = boards
   const folded =
     board === 'approach' ? collapsed.approach : board === 'landed' ? collapsed.landed : 0
   const strips = sessionsOn(boards, board)
@@ -117,6 +118,13 @@ export function App(): React.JSX.Element {
           </p>
         )}
 
+        {board !== 'departures' && trimmed[BOARD_KEY[board]] > 0 && (
+          <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
+            {trimmed[BOARD_KEY[board]]} MORE NOT SHOWN — THIS BOARD IS SET TO HOLD {strips.length}.
+            RAISE IT IN PREFERENCES.
+          </p>
+        )}
+
         {board === 'landed' && olderCount > 0 && (
           <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-[10px]">
             {olderCount} SESSION{olderCount === 1 ? '' : 'S'} OFF THE BOARDS — NOT IN FLIGHT,
@@ -134,6 +142,17 @@ export function App(): React.JSX.Element {
   )
 }
 
+/**
+ * Tab name to limits key. Only the four inferred boards have limits — DEPARTURES is a
+ * list you wrote, and trimming that would be deleting your own rows.
+ */
+const BOARD_KEY: Record<Exclude<Board, 'departures'>, keyof Boards['trimmed']> = {
+  'en-route': 'enRoute',
+  holding: 'holding',
+  approach: 'approach',
+  landed: 'landed',
+}
+
 /** Empty-state copy per board, so "nothing here" still says what it means. */
 const EMPTY: Record<Exclude<Board, 'departures'>, { title: string; body: string }> = {
   approach: {
@@ -142,7 +161,7 @@ const EMPTY: Record<Exclude<Board, 'departures'>, { title: string; body: string 
   },
   'en-route': {
     title: 'NOTHING IN THE AIR',
-    body: 'No running session touched in the last 8 hours without a pull request open. Anything that has one is on APPROACH.',
+    body: 'No running session without a pull request open. Anything that has one is on APPROACH, and a session whose process has exited is not in the air at all.',
   },
   holding: {
     title: 'NOTHING PARKED',

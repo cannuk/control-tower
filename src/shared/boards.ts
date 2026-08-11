@@ -19,17 +19,6 @@ import {
  */
 
 /**
- * How recent a session must be to count as "in the air" on EN ROUTE.
- *
- * Only EN ROUTE needs a recency bound. APPROACH and LANDED are defined by PR
- * state, which stays meaningful however long ago you last typed — a PR with
- * feedback waiting does not stop mattering because you closed the terminal.
- * EN ROUTE has no such anchor, so without a window it would list every session
- * that never got reviewed: ~90 rows of history rather than today's work.
- */
-export const EN_ROUTE_WINDOW_HOURS = 8
-
-/**
  * Whether a session is in the air, rather than merely recent.
  *
  * Recency alone was the original rule for the active board, chosen back when that
@@ -42,12 +31,58 @@ export const EN_ROUTE_WINDOW_HOURS = 8
  * and a PR with feedback waiting needs you whether or not its terminal is still
  * open — gating them on liveness would hide the most actionable rows on the board.
  */
-function inFlight(session: Session, cutoff: number): boolean {
-  return session.lastContact >= cutoff && session.transponder !== 'no-contact'
+function inFlight(session: Session): boolean {
+  return session.transponder !== 'no-contact'
 }
 
-/** How many recently merged PRs the LANDED board holds. */
-export const LANDED_LIMIT = 10
+/**
+ * How many rows each board holds. `null` means every one of them.
+ *
+ * EN ROUTE used an eight-hour recency window, which asked "was this touched recently"
+ * — a question whose answer rode on a clock that turned out to be wrong, and which was
+ * never the real question. Once last contact came from the conversation rather than the
+ * file's mtime, 21 of 22 running sessions fell outside the window and the board showed
+ * a single row. A count has no such failure mode: a quiet week shows as many rows as a
+ * busy hour, just older ones.
+ *
+ * The two bounded boards are bounded because they are lists of *recent* things, where
+ * an old row is genuinely less interesting than a new one. The two unbounded ones are
+ * not lists at all — they are queues of things that need you:
+ *
+ *   - APPROACH is people waiting on you. A cap there hides someone's review, and the
+ *     hidden one would be the oldest, which is the one that has waited longest.
+ *   - HOLDING is what you deliberately parked. A cap there discards a decision you
+ *     made explicitly, which is the same mistake as the hold that used to expire after
+ *     eight hours.
+ *
+ * Both stay configurable anyway, because "probably no limit" is a default rather than a
+ * law, and a hundred parked rows is its own kind of unreadable.
+ */
+export interface BoardLimits {
+  enRoute: number | null
+  holding: number | null
+  approach: number | null
+  landed: number | null
+}
+
+export const DEFAULT_BOARD_LIMITS: BoardLimits = {
+  enRoute: 12,
+  holding: null,
+  approach: null,
+  landed: 10,
+}
+
+/**
+ * Take the first `limit` rows, and say how many were left behind.
+ *
+ * The count is the point. A board that shrinks without admitting it reads as complete
+ * when it is not — the same reason folded rows are reported rather than dropped.
+ */
+function capped<T>(rows: T[], limit: number | null): { kept: T[]; trimmed: number } {
+  if (limit === null) return { kept: rows, trimmed: 0 }
+  const kept = rows.slice(0, Math.max(0, limit))
+  return { kept, trimmed: rows.length - kept.length }
+}
 
 const prKey = (repository: string, number: number): string => repository + '#' + number
 
@@ -67,6 +102,13 @@ export interface Boards {
    * several sessions have worked one PR.
    */
   collapsed: { approach: number; landed: number }
+  /**
+   * Rows a board's limit left off, per board.
+   *
+   * Separate from `collapsed` because they are different losses: a folded row is
+   * still represented by another row, while a trimmed one is simply not shown.
+   */
+  trimmed: { enRoute: number; holding: number; approach: number; landed: number }
 }
 
 /**
@@ -76,7 +118,10 @@ export interface Boards {
  * APPROACH wins over everything: a PR a human is waiting on is the most
  * actionable thing on the board and must not be buried by a sibling that merged.
  */
-export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now()): Boards {
+export function splitByBoard(
+  snapshot: SessionSnapshot | null,
+  limits: BoardLimits = DEFAULT_BOARD_LIMITS,
+): Boards {
   if (!snapshot) {
     return {
       enRoute: [],
@@ -85,6 +130,7 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
       landed: [],
       olderCount: 0,
       collapsed: { approach: 0, landed: 0 },
+      trimmed: { enRoute: 0, holding: 0, approach: 0, landed: 0 },
     }
   }
 
@@ -102,11 +148,10 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
   const recentlyMerged = new Set(
     [...mergedByKey.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, LANDED_LIMIT)
+      .slice(0, limits.landed ?? mergedByKey.size)
       .map(([key]) => key),
   )
 
-  const cutoff = now - EN_ROUTE_WINDOW_HOURS * 3600_000
   const approach: Session[] = []
   const landed: Session[] = []
   const holding: Session[] = []
@@ -146,7 +191,7 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
       holding.push(session)
     } else if (session.prs.some(onApproach)) {
       approach.push(session)
-    } else if (inFlight(session, cutoff)) {
+    } else if (inFlight(session)) {
       enRoute.push(session)
     } else {
       olderCount += 1
@@ -163,13 +208,27 @@ export function splitByBoard(snapshot: SessionSnapshot | null, now = Date.now())
 
   const waiting = oneRowPerPr(approach, 'approach')
 
+  // Every board is already in its display order by this point, so a cap keeps the
+  // rows that matter most on each: the most recent on EN ROUTE, the newest merges on
+  // LANDED. `sessions` was sorted by last contact at the top.
+  const air = capped(enRoute, limits.enRoute)
+  const parked = capped(holding, limits.holding)
+  const inbound = capped(waiting.kept, limits.approach)
+  const down = capped(shipped.kept, limits.landed)
+
   return {
-    enRoute,
-    holding,
-    approach: waiting.kept,
-    landed: shipped.kept,
+    enRoute: air.kept,
+    holding: parked.kept,
+    approach: inbound.kept,
+    landed: down.kept,
     olderCount,
     collapsed: { approach: waiting.collapsed, landed: shipped.collapsed },
+    trimmed: {
+      enRoute: air.trimmed,
+      holding: parked.trimmed,
+      approach: inbound.trimmed,
+      landed: down.trimmed,
+    },
   }
 }
 

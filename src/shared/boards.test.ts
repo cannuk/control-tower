@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EN_ROUTE_WINDOW_HOURS, splitByBoard } from './boards.js'
+import { DEFAULT_BOARD_LIMITS, splitByBoard, type BoardLimits } from './boards.js'
 import type { PrRef, Session, SessionSnapshot } from './types.js'
 
 /**
@@ -61,10 +61,15 @@ function session(over: Partial<Session> = {}): Session {
 }
 
 const snap = (sessions: Session[]): SessionSnapshot => ({ sessions, sweptAt: NOW, warnings: [] })
-const split = (sessions: Session[]) => splitByBoard(snap(sessions), NOW)
+const split = (sessions: Session[]) => splitByBoard(snap(sessions))
+/** One board capped, the rest left at their defaults. */
+const withLimit = (over: Partial<BoardLimits>): BoardLimits => ({
+  ...DEFAULT_BOARD_LIMITS,
+  ...over,
+})
 
 describe('EN ROUTE', () => {
-  it('takes a live session touched inside the window', () => {
+  it('takes a live session', () => {
     const { enRoute } = split([session()])
     expect(enRoute).toHaveLength(1)
   })
@@ -78,9 +83,53 @@ describe('EN ROUTE', () => {
     expect(olderCount).toBe(1)
   })
 
-  it('drops a live session past the window', () => {
-    const { enRoute } = split([session({ lastContact: NOW - (EN_ROUTE_WINDOW_HOURS + 1) * HOUR })])
-    expect(enRoute).toHaveLength(0)
+  it('keeps a live session however long ago it last spoke', () => {
+    // The replaced rule. An eight-hour window meant a night off emptied the board:
+    // 21 of 22 running sessions fell outside it, and the answer to "what am I working
+    // on" became one row. Age orders the list now; it does not remove anything.
+    const { enRoute } = split([session({ lastContact: NOW - 400 * HOUR })])
+    expect(enRoute).toHaveLength(1)
+  })
+
+  it('holds only the limit, keeping the most recent', () => {
+    const rows = [
+      session({ sessionId: 'oldest', lastContact: NOW - 3 * HOUR }),
+      session({ sessionId: 'newest', lastContact: NOW - 1 * HOUR }),
+      session({ sessionId: 'middle', lastContact: NOW - 2 * HOUR }),
+    ]
+    const { enRoute } = splitByBoard(snap(rows), withLimit({ enRoute: 2 }))
+    expect(enRoute.map((s) => s.sessionId)).toEqual(['newest', 'middle'])
+  })
+
+  it('orders by last contact, newest first', () => {
+    const rows = [
+      session({ sessionId: 'b', lastContact: NOW - 2 * HOUR }),
+      session({ sessionId: 'c', lastContact: NOW - 3 * HOUR }),
+      session({ sessionId: 'a', lastContact: NOW - 1 * HOUR }),
+    ]
+    expect(
+      splitByBoard(snap(rows), withLimit({ enRoute: 10 })).enRoute.map((s) => s.sessionId),
+    ).toEqual(['a', 'b', 'c'])
+  })
+
+  it('counts what the limit trimmed rather than dropping it silently', () => {
+    // A board that shrinks without saying so reads as complete when it is not.
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      session({ sessionId: `s${i}`, lastContact: NOW - i * HOUR }),
+    )
+    const { enRoute, trimmed, olderCount } = splitByBoard(snap(rows), withLimit({ enRoute: 2 }))
+    expect(enRoute).toHaveLength(2)
+    expect(trimmed.enRoute).toBe(3)
+    // Reported per board rather than folded into olderCount, which means something
+    // else: a session on no board at all. A trimmed row is on this board and hidden,
+    // and the footer has to be able to say which of the two happened.
+    expect(olderCount).toBe(0)
+  })
+
+  it('survives a nonsensical limit rather than rendering a negative slice', () => {
+    // The main process clamps this, but the board must not depend on that holding.
+    expect(splitByBoard(snap([session()]), withLimit({ enRoute: 0 })).enRoute).toHaveLength(0)
+    expect(splitByBoard(snap([session()]), withLimit({ enRoute: -5 })).enRoute).toHaveLength(0)
   })
 })
 
@@ -296,6 +345,77 @@ describe('the empty snapshot', () => {
       landed: [],
       olderCount: 0,
       collapsed: { approach: 0, landed: 0 },
+      trimmed: { enRoute: 0, holding: 0, approach: 0, landed: 0 },
     })
+  })
+})
+
+/**
+ * Per-board limits.
+ *
+ * The two queues are unbounded by default and that is the whole point: APPROACH is
+ * people waiting on you, where the row a cap would hide is the one that has waited
+ * longest, and HOLDING is what you deliberately parked, where a cap discards a decision
+ * you made on purpose — the same mistake as the hold that used to expire after eight
+ * hours.
+ */
+describe('limits per board', () => {
+  const merged = (n: number) => pr({ number: n, mergedAt: `2026-08-0${n}T00:00:00Z` })
+
+  it('leaves HOLDING and APPROACH uncapped by default', () => {
+    const parked = Array.from({ length: 30 }, (_, i) =>
+      session({ sessionId: `h${i}`, held: true, lastContact: NOW - i * HOUR }),
+    )
+    const waiting = Array.from({ length: 30 }, (_, i) =>
+      session({ sessionId: `a${i}`, lastContact: NOW - i * HOUR, prs: [pr({ number: 100 + i })] }),
+    )
+    const { holding, approach, trimmed } = split([...parked, ...waiting])
+    expect(holding).toHaveLength(30)
+    expect(approach).toHaveLength(30)
+    expect(trimmed.holding).toBe(0)
+    expect(trimmed.approach).toBe(0)
+  })
+
+  it('caps HOLDING when you ask it to, and says how many it hid', () => {
+    const parked = Array.from({ length: 5 }, (_, i) =>
+      session({ sessionId: `h${i}`, held: true, lastContact: NOW - i * HOUR }),
+    )
+    const { holding, trimmed } = splitByBoard(snap(parked), withLimit({ holding: 2 }))
+    expect(holding.map((s) => s.sessionId)).toEqual(['h0', 'h1'])
+    expect(trimmed.holding).toBe(3)
+  })
+
+  it('caps APPROACH independently of EN ROUTE', () => {
+    const rows = [
+      session({ sessionId: 'a', lastContact: NOW - 1 * HOUR, prs: [pr({ number: 1 })] }),
+      session({ sessionId: 'b', lastContact: NOW - 2 * HOUR, prs: [pr({ number: 2 })] }),
+      session({ sessionId: 'c', lastContact: NOW - 3 * HOUR }),
+      session({ sessionId: 'd', lastContact: NOW - 4 * HOUR }),
+    ]
+    const { approach, enRoute, trimmed } = splitByBoard(
+      snap(rows),
+      withLimit({ approach: 1, enRoute: 1 }),
+    )
+    expect(approach.map((s) => s.sessionId)).toEqual(['a'])
+    expect(enRoute.map((s) => s.sessionId)).toEqual(['c'])
+    expect(trimmed).toMatchObject({ approach: 1, enRoute: 1 })
+  })
+
+  it('still bounds LANDED, and by merge time rather than arrival', () => {
+    const rows = [1, 2, 3].map((n) =>
+      session({ sessionId: `s${n}`, lastContact: NOW - n * HOUR, prs: [merged(n)] }),
+    )
+    const { landed } = splitByBoard(snap(rows), withLimit({ landed: 2 }))
+    // 3 merged latest, so it leads and 1 is the one dropped.
+    expect(landed.map((s) => s.sessionId)).toEqual(['s3', 's2'])
+  })
+
+  it('shows every merge when LANDED is uncapped', () => {
+    const rows = [1, 2, 3].map((n) =>
+      session({ sessionId: `s${n}`, lastContact: NOW - n * HOUR, prs: [merged(n)] }),
+    )
+    const { landed, trimmed } = splitByBoard(snap(rows), withLimit({ landed: null }))
+    expect(landed).toHaveLength(3)
+    expect(trimmed.landed).toBe(0)
   })
 })

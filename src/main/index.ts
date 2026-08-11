@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
+import { DEFAULT_BOARD_LIMITS, type BoardLimits } from '../shared/boards.js'
 import { join } from 'node:path'
 import Store from 'electron-store'
 import {
@@ -71,6 +72,14 @@ interface Prefs {
   bounds: Bounds
   theme: ThemeName
   /**
+   * How many rows each board holds, null meaning all of them.
+   *
+   * Yours to set because the right number is how many things you keep in the air at
+   * once, which no default can know. EN ROUTE's replaced an eight-hour recency window
+   * that emptied the board every morning — a night is longer than eight hours.
+   */
+  boardLimits: BoardLimits
+  /**
    * The tab you were last on.
    *
    * Persisted because the app is restarted often — during development constantly,
@@ -92,6 +101,7 @@ const store = new Store<Prefs>({
   defaults: {
     bounds: { width: 460, height: 720 },
     theme: 'night-scope',
+    boardLimits: DEFAULT_BOARD_LIMITS,
     // APPROACH by default: on a first run the useful question is who is waiting on
     // you, not what you were doing.
     board: 'approach',
@@ -100,6 +110,44 @@ const store = new Store<Prefs>({
 })
 
 let win: BrowserWindow | null = null
+
+/**
+ * Keep a board limit inside what the board can actually render.
+ *
+ * Stored preferences outlive the code that wrote them, and these are numbers a
+ * hand-edited config file could set to zero or to a million. The floor is 1 because a
+ * board that can hold nothing is indistinguishable from the bug this replaced; the
+ * ceiling is arbitrary but finite, since every row is a live strip.
+ */
+const BOARD_LIMIT_MIN = 1
+const BOARD_LIMIT_MAX = 200
+
+/** One board's limit, or null for no limit. Anything unusable falls back to null. */
+function clampLimit(value: unknown): number | null {
+  if (value === null) return null
+  const n = Math.round(Number(value))
+  if (!Number.isFinite(n)) return null
+  return Math.min(BOARD_LIMIT_MAX, Math.max(BOARD_LIMIT_MIN, n))
+}
+
+/**
+ * Read the limits, filling any board the stored value does not cover.
+ *
+ * Field by field rather than trusting the object: this is JSON a hand edit or an older
+ * build could have written, and a missing key would otherwise reach `slice` as
+ * undefined and quietly empty a board.
+ */
+function readBoardLimits(): BoardLimits {
+  const stored = store.get('boardLimits') as Partial<Record<keyof BoardLimits, unknown>> | undefined
+  const read = (key: keyof BoardLimits): number | null =>
+    stored && key in stored ? clampLimit(stored[key]) : DEFAULT_BOARD_LIMITS[key]
+  return {
+    enRoute: read('enRoute'),
+    holding: read('holding'),
+    approach: read('approach'),
+    landed: read('landed'),
+  }
+}
 
 /**
  * The native window paints before the renderer stylesheet loads, so this has to match
@@ -233,6 +281,20 @@ ipcMain.handle('prefs:getBoard', (): Board => readBoard())
 ipcMain.handle('prefs:setBoard', (_e, board: Board) => {
   if (!(BOARDS as readonly string[]).includes(board)) return
   store.set('board', board)
+})
+
+ipcMain.handle('prefs:getBoardLimits', (): BoardLimits => readBoardLimits())
+
+ipcMain.handle('prefs:setBoardLimits', (_e, limits: Partial<BoardLimits>) => {
+  // Merged over what is stored, so a caller may send one board without clearing the
+  // rest, and re-clamped on the way in — the renderer is not the authority here.
+  const current = readBoardLimits()
+  store.set('boardLimits', {
+    enRoute: 'enRoute' in limits ? clampLimit(limits.enRoute) : current.enRoute,
+    holding: 'holding' in limits ? clampLimit(limits.holding) : current.holding,
+    approach: 'approach' in limits ? clampLimit(limits.approach) : current.approach,
+    landed: 'landed' in limits ? clampLimit(limits.landed) : current.landed,
+  })
 })
 
 ipcMain.handle('prefs:getTitling', (): boolean => store.get('titling') !== false)

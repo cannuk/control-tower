@@ -1,9 +1,20 @@
+import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { THEME_HINTS, THEME_LABELS, THEMES } from '../../../shared/types.js'
-import { EN_ROUTE_WINDOW_HOURS, LANDED_LIMIT } from '../../../shared/boards.js'
+import type { BoardLimits } from '../../../shared/boards.js'
 import { cn } from '../lib/utils.js'
 import { useStore } from '../store.js'
 import { Overlay, Section } from './Overlay.js'
+
+/**
+ * The range a board limit accepts, mirroring the clamp in the main process.
+ *
+ * Duplicated deliberately rather than shared: these are input attributes, and the
+ * authoritative guard is the one next to the store that persists the value. If they
+ * ever disagree the main process wins, which is the safe direction.
+ */
+const BOARD_LIMIT_MIN = 1
+const BOARD_LIMIT_MAX = 200
 
 /**
  * Preferences.
@@ -13,13 +24,14 @@ import { Overlay, Section } from './Overlay.js'
  * hover menu. Neither said what it did without a tooltip, and a title bar that
  * accumulates one control per setting does not scale past the two we have.
  *
- * Board thresholds are shown but not editable. They are real preferences and
- * belong here eventually; they are compile-time constants today, and displaying
- * the values beats pretending they do not exist — you can at least see what the
- * boards are doing without reading the source.
+ * Row limits are per board and editable, replacing a pair of compile-time constants
+ * that were displayed but fixed. They are separate settings because the boards want
+ * opposite things: the two that list recent work are better bounded, and the two that
+ * queue work needing you are better not.
  */
 export function Preferences(): React.JSX.Element {
-  const { theme, setTheme, titling, toggleTitling, closeOverlay } = useStore()
+  const { theme, setTheme, titling, toggleTitling, boardLimits, setBoardLimit, closeOverlay } =
+    useStore()
 
   return (
     <Overlay
@@ -67,12 +79,19 @@ export function Preferences(): React.JSX.Element {
         ))}
       </Section>
 
-      <Section title="BOARD THRESHOLDS">
-        <p className="text-text-muted text-[11px] leading-snug">
-          EN ROUTE holds running sessions touched in the last{' '}
-          <span className="field text-text">{EN_ROUTE_WINDOW_HOURS} hours</span>. LANDED holds the
-          last <span className="field text-text">{LANDED_LIMIT}</span> merged pull requests. Both
-          are fixed for now.
+      <Section title="ROWS PER BOARD">
+        {LIMIT_FIELDS.map(({ key, label, hint }) => (
+          <Limit
+            key={key}
+            label={label}
+            hint={hint}
+            value={boardLimits[key]}
+            onChange={(limit) => void setBoardLimit(key, limit)}
+          />
+        ))}
+        <p className="text-text-subtle px-2 pt-1 text-[11px] leading-snug">
+          Anything a limit hides is counted at the foot of the board, never dropped silently.
+          DEPARTURES is a list you wrote, so it is never trimmed.
         </p>
       </Section>
     </Overlay>
@@ -119,5 +138,93 @@ function Toggle({
         <span className="text-text-subtle mt-0.5 block text-[11px] leading-snug">{body}</span>
       </span>
     </button>
+  )
+}
+
+/**
+ * The four boards a limit applies to, in tab order.
+ *
+ * The hints say what the number costs you rather than what it does, because that is
+ * the part you cannot see from the board: capping a queue hides the row that has
+ * waited longest, which is the opposite of what you want from a queue.
+ */
+const LIMIT_FIELDS: { key: keyof BoardLimits; label: string; hint: string }[] = [
+  {
+    key: 'holding',
+    label: 'HOLDING',
+    hint: 'What you parked on purpose. Best left at All — a limit here discards a decision you made explicitly.',
+  },
+  {
+    key: 'enRoute',
+    label: 'EN ROUTE',
+    hint: 'The running sessions you spoke to most recently. This replaced an eight-hour window that emptied the board every night.',
+  },
+  {
+    key: 'approach',
+    label: 'APPROACH',
+    hint: 'People waiting on you. Best left at All — the row a limit hides is the one that has waited longest.',
+  },
+  { key: 'landed', label: 'LANDED', hint: 'Recent merges, newest first.' },
+]
+
+/**
+ * One board's row limit, where empty means no limit.
+ *
+ * Kept as local text rather than driven straight from the number, because a number
+ * input is transiently empty while you clear it to type a new value. Reading that
+ * empty string as a number is how a board ends up holding zero rows mid-keystroke, so
+ * nothing is committed until the value parses inside the range — and an empty field
+ * commits `null`, which is how you say "all of them".
+ */
+function Limit({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint: string
+  value: number | null
+  onChange: (limit: number | null) => void
+}): React.JSX.Element {
+  /**
+   * Seeded from the stored value and then left alone.
+   *
+   * Not synced back from the prop: this field is the only thing that writes it, so an
+   * effect pushing the committed number back into the box would only ever fight the
+   * keystroke that caused it — and it would clobber a half-typed value the moment a
+   * sweep re-rendered. The overlay is short-lived, so reopening it re-seeds.
+   */
+  const [text, setText] = useState(value === null ? '' : String(value))
+
+  return (
+    <label className="flex items-start justify-between gap-3 px-2 py-2">
+      <span className="min-w-0">
+        <span className="field text-text block text-[11px] font-semibold tracking-wider">
+          {label}
+        </span>
+        <span className="text-text-subtle mt-0.5 block text-[11px] leading-snug">{hint}</span>
+      </span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={BOARD_LIMIT_MIN}
+        max={BOARD_LIMIT_MAX}
+        placeholder="All"
+        value={text}
+        aria-label={`${label} row limit, blank for all`}
+        onChange={(e) => {
+          const next = e.target.value
+          setText(next)
+          if (next.trim() === '') {
+            onChange(null)
+            return
+          }
+          const n = Number(next)
+          if (Number.isInteger(n) && n >= BOARD_LIMIT_MIN && n <= BOARD_LIMIT_MAX) onChange(n)
+        }}
+        className="field bg-surface-raised text-text ring-border focus-visible:ring-ring mt-0.5 w-16 shrink-0 rounded px-2 py-1 text-right text-[11px] ring-1 outline-none"
+      />
+    </label>
   )
 }

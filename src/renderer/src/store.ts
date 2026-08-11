@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { DEFAULT_BOARD_LIMITS, type BoardLimits } from '../../shared/boards.js'
 import type { Board, Departure, SessionSnapshot, ThemeName } from '../../shared/types.js'
 
 interface State {
@@ -18,6 +19,8 @@ interface State {
    */
   overlay: Overlay
   titling: boolean
+  /** How many rows each board holds, null meaning all — see DEFAULT_BOARD_LIMITS. */
+  boardLimits: BoardLimits
   /**
    * Bumped once per *manual* sweep, and used as a React key to replay the scan
    * animation.
@@ -44,6 +47,7 @@ interface State {
 
   init: () => Promise<void>
   setTheme: (theme: ThemeName) => Promise<void>
+  setBoardLimit: (board: keyof BoardLimits, limit: number | null) => Promise<void>
   setBoard: (board: Board) => void
   refresh: (announce?: boolean) => Promise<void>
   loadDepartures: () => Promise<void>
@@ -85,22 +89,33 @@ export const useStore = create<State>((set, get) => ({
   tick: 0,
   overlay: null,
   titling: true,
+  boardLimits: DEFAULT_BOARD_LIMITS,
   scanId: 0,
   departures: [],
 
   init: async () => {
     try {
-      const [theme, titling, board] = await Promise.all([
+      const [theme, titling, board, boardLimits] = await Promise.all([
         window.controlTower.getTheme(),
         window.controlTower.getTitling(),
         window.controlTower.getBoard(),
+        window.controlTower.getBoardLimits(),
       ])
       applyTheme(theme)
-      set({ theme, titling, board })
+      set({ theme, titling, board, boardLimits })
       await Promise.all([get().refresh(false), get().loadDepartures()])
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
     }
+  },
+
+  /**
+   * Set immediately, persist after. The board re-splits from the new value on the
+   * next render, so a slow write must not make the control feel unresponsive.
+   */
+  setBoardLimit: async (board, limit) => {
+    set({ boardLimits: { ...get().boardLimits, [board]: limit } })
+    await window.controlTower.setBoardLimits({ [board]: limit })
   },
 
   setTheme: async (theme) => {

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { BoardLimits } from '../shared/boards.js'
 import type { Board, Departure, SessionSnapshot, ThemeName, TuneResult } from '../shared/types.js'
 
 /**
@@ -13,6 +14,9 @@ const api = {
   setBoard: (board: Board): Promise<void> => ipcRenderer.invoke('prefs:setBoard', board),
   getSnapshot: (refreshPrs = false): Promise<SessionSnapshot> =>
     ipcRenderer.invoke('sessions:snapshot', refreshPrs),
+  getBoardLimits: (): Promise<BoardLimits> => ipcRenderer.invoke('prefs:getBoardLimits'),
+  setBoardLimits: (limits: Partial<BoardLimits>): Promise<void> =>
+    ipcRenderer.invoke('prefs:setBoardLimits', limits),
   getTitling: (): Promise<boolean> => ipcRenderer.invoke('prefs:getTitling'),
   setTitling: (on: boolean): Promise<void> => ipcRenderer.invoke('prefs:setTitling', on),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
