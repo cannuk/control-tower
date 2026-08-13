@@ -420,3 +420,71 @@ describe('limits per board', () => {
     expect(trimmed.landed).toBe(0)
   })
 })
+
+describe('the LANDED limit counts rows, not merges', () => {
+  const at = (day: number) => `2026-08-${String(day).padStart(2, '0')}T00:00:00Z`
+
+  it('does not let one session spend several slots', () => {
+    // The reported bug. LANDED membership was "holds one of the N most recently merged
+    // PRs", so a session with three merges consumed three of the N and still drew one
+    // row. Set to 20, the board showed 11.
+    const rows = [
+      session({
+        sessionId: 'three-merges',
+        lastContact: NOW - 1 * HOUR,
+        prs: [
+          pr({ number: 1, mergedAt: at(9) }),
+          pr({ number: 2, mergedAt: at(8) }),
+          pr({ number: 3, mergedAt: at(7) }),
+        ],
+      }),
+      session({
+        sessionId: 'b',
+        lastContact: NOW - 2 * HOUR,
+        prs: [pr({ number: 4, mergedAt: at(6) })],
+      }),
+      session({
+        sessionId: 'c',
+        lastContact: NOW - 3 * HOUR,
+        prs: [pr({ number: 5, mergedAt: at(5) })],
+      }),
+    ]
+    const { landed } = splitByBoard(snap(rows), withLimit({ landed: 3 }))
+    expect(landed.map((s) => s.sessionId)).toEqual(['three-merges', 'b', 'c'])
+  })
+
+  it('does not let a session with an open PR spend a slot either', () => {
+    // It qualified for the merged window and was then rejected by the open-PR guard,
+    // so the slot bought no row at all.
+    const rows = [
+      session({
+        sessionId: 'still-open',
+        lastContact: NOW - 1 * HOUR,
+        prs: [pr({ number: 1, mergedAt: at(9) }), pr({ number: 2 })],
+      }),
+      session({
+        sessionId: 'shipped',
+        lastContact: NOW - 2 * HOUR,
+        prs: [pr({ number: 3, mergedAt: at(8) })],
+      }),
+    ]
+    const { landed, approach } = splitByBoard(snap(rows), withLimit({ landed: 1 }))
+    expect(landed.map((s) => s.sessionId)).toEqual(['shipped'])
+    expect(approach.map((s) => s.sessionId)).toEqual(['still-open'])
+  })
+
+  it('fills the board to the limit from however far back it needs to reach', () => {
+    // Recency is the sort order, not a membership test: an old merge is shown if there
+    // is room for it rather than dropped for being old.
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      session({
+        sessionId: `s${i}`,
+        lastContact: NOW - i * HOUR,
+        prs: [pr({ number: i + 1, mergedAt: at(9 - i) })],
+      }),
+    )
+    const { landed, trimmed } = splitByBoard(snap(rows), withLimit({ landed: 4 }))
+    expect(landed).toHaveLength(4)
+    expect(trimmed.landed).toBe(1)
+  })
+})

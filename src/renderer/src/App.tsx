@@ -127,8 +127,8 @@ export function App(): React.JSX.Element {
 
         {board === 'landed' && olderCount > 0 && (
           <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-footnote">
-            {olderCount} SESSION{olderCount === 1 ? '' : 'S'} OFF THE BOARDS — NOT IN FLIGHT,
-            NOTHING IN REVIEW, NOTHING SHIPPED RECENTLY
+            {olderCount} SESSION{olderCount === 1 ? '' : 'S'} OFF THE BOARDS — NOT RUNNING, AND NO
+            PULL REQUEST OF ANY KIND
           </p>
         )}
       </main>

@@ -12,10 +12,10 @@ import {
  *
  * This lived in the renderer store until the titler needed it: summaries are only
  * generated for EN ROUTE sessions, and the main process cannot decide that from a
- * session in isolation — LANDED membership depends on the ten most recently merged
- * PRs across the whole board. Two copies of the rule would be two things to keep
- * in step, and the failure would be quiet: the titler summarising sessions the
- * board does not consider active.
+ * session in isolation — which board a session lands on depends on every other
+ * session, since the boards are ordered and bounded as a whole. Two copies of the rule
+ * would be two things to keep in step, and the failure would be quiet: the titler
+ * summarising sessions the board does not consider active.
  */
 
 /**
@@ -92,7 +92,12 @@ export interface Boards {
   holding: Session[]
   approach: Session[]
   landed: Session[]
-  /** Sessions on no board: nothing in review, nothing shipped recently, not in flight. */
+  /**
+   * Sessions on no board at all: no pull request of any kind, and not running.
+   *
+   * Distinct from `trimmed`. A trimmed row qualified for its board and did not fit; one
+   * counted here qualified for nothing.
+   */
   olderCount: number
   /**
    * Sessions folded into another row because they share its pull request.
@@ -136,22 +141,6 @@ export function splitByBoard(
 
   const sessions = [...snapshot.sessions].sort((a, b) => b.lastContact - a.lastContact)
 
-  // The N most recently merged PRs across the whole board. Deduped by key first:
-  // one PR is often linked from several sessions, and it should occupy one slot.
-  const mergedByKey = new Map<string, number>()
-  for (const session of sessions) {
-    for (const pr of session.prs) {
-      if (!pr.mergedAt) continue
-      mergedByKey.set(prKey(pr.repository, pr.number), Date.parse(pr.mergedAt))
-    }
-  }
-  const recentlyMerged = new Set(
-    [...mergedByKey.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, limits.landed ?? mergedByKey.size)
-      .map(([key]) => key),
-  )
-
   const approach: Session[] = []
   const landed: Session[] = []
   const holding: Session[] = []
@@ -160,13 +149,22 @@ export function splitByBoard(
 
   for (const session of sessions) {
     if (
-      // LANDED means finished, so nothing still in flight may appear — not even
-      // alongside a merge. One merged sibling must not file a whole session under
-      // "shipped" while an open PR sits inside it. That guard is also why LANDED can
-      // be tested first without burying a PR someone is waiting on: a session with an
-      // open reviewed PR can never satisfy it.
+      /**
+       * LANDED means finished, so nothing still in flight may appear — not even
+       * alongside a merge. One merged sibling must not file a whole session under
+       * "shipped" while an open PR sits inside it. That guard is also why LANDED can be
+       * tested first without burying a PR someone is waiting on: a session with an open
+       * reviewed PR can never satisfy it.
+       *
+       * Membership is "has a merge", with recency left entirely to the sort and the
+       * limit below. It used to be "has one of the N most recently merged PRs", which
+       * spent the limit twice over: a session with three merges consumed three of the N
+       * slots and still rendered one row, and a slot spent on a session that also had an
+       * open PR bought no row at all. Configured to 20, the board showed 11 — 20 PR
+       * slots resolving to 16 sessions, two of which shared a PR and collapsed.
+       */
       !session.prs.some(isOpen) &&
-      session.prs.some((pr) => recentlyMerged.has(prKey(pr.repository, pr.number)))
+      session.prs.some((pr) => pr.mergedAt !== null)
     ) {
       landed.push(session)
     } else if (session.held) {
