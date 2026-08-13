@@ -46,6 +46,7 @@ function session(over: Partial<Session> = {}): Session {
     gitDirty: false,
     summary: 'A session',
     summarySource: 'generated',
+    userName: null,
     sessionState: null,
     fallbackName: 'repo-aa',
     transponder: 'idle',

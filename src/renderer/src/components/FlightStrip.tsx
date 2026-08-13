@@ -1,7 +1,14 @@
 import { useState } from 'react'
-import { GitBranch, MapPin, PauseCircle, PlayCircle, TriangleAlert, X } from 'lucide-react'
+import { GitBranch, MapPin, PauseCircle, Pencil, PlayCircle, TriangleAlert, X } from 'lucide-react'
 import { describeApproach } from '../../../shared/describe.js'
-import { headlinePr, squawk, type Board, type PrRef, type Session } from '../../../shared/types.js'
+import {
+  headlinePr,
+  rowHeadline,
+  squawk,
+  type Board,
+  type PrRef,
+  type Session,
+} from '../../../shared/types.js'
 import { dotFor, sessionDim } from '../lib/status.js'
 import { absoluteTime, elapsed } from '../lib/time.js'
 import { cn } from '../lib/utils.js'
@@ -38,8 +45,9 @@ export function FlightStrip({
   board: Board
 }): React.JSX.Element {
   const dot = dotFor(session.transponder, session.unread)
-  const { setHeld, markRead, dismissPr } = useStore()
+  const { setHeld, markRead, dismissPr, renameSession } = useStore()
   const [tuneError, setTuneError] = useState<string | null>(null)
+  const [draft, setDraft] = useState<string | null>(null)
 
   const lead = headlinePr(session, board)
   const sessionName = session.summary ?? session.fallbackName
@@ -50,9 +58,8 @@ export function FlightStrip({
     ? null
     : ([...session.prs].sort((a, b) => b.number - a.number)[0] ?? null)
 
-  // A PR with no fetched title yet still leads, falling back to its number —
-  // deferring to the session name would make the row jump when the title lands.
-  const headline = lead ? (lead.title ?? `#${lead.number}`) : sessionName
+  // Precedence lives in rowHeadline, which is tested — see shared/types.
+  const headline = rowHeadline(session, board)
 
   /**
    * The state line, from whichever source the board has.
@@ -107,7 +114,7 @@ export function FlightStrip({
   }
 
   return (
-    <article className="border-scope-line hover:bg-surface-raised flex gap-4 border-b px-4 py-5 transition-colors">
+    <article className="border-scope-line hover:bg-surface-raised group/strip flex gap-4 border-b px-4 py-5 transition-colors">
       {/* Fixed gutter — the squawk is always four characters in a monospaced
           face, so this column is the same width on every strip. */}
       <div className="flex w-[4rem] shrink-0 items-center gap-2.5 pt-0.5">
@@ -152,14 +159,64 @@ export function FlightStrip({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-4">
-          <button
-            type="button"
-            onClick={() => void tune()}
-            title="Tune to this flight — bring its terminal to the front, or resume it"
-            className="no-drag hover:text-accent min-w-0 flex-1 cursor-pointer truncate text-left text-headline leading-6 font-medium"
-          >
-            {headline}
-          </button>
+          {draft === null ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void tune()}
+                title="Tune to this flight — bring its terminal to the front, or resume it"
+                className="no-drag hover:text-accent min-w-0 flex-1 cursor-pointer truncate text-left text-headline leading-6 font-medium"
+              >
+                {headline}
+              </button>
+
+              {/*
+                Its own button, because there is no gesture left on the headline to
+                borrow. A single click there tunes, which brings the terminal to the
+                front and takes focus off this window — so a double-click never
+                completes, and the first attempt at this shipped a rename you could not
+                actually reach.
+
+                Dim until the row is hovered rather than hidden: a control that only
+                exists on hover cannot be found by anyone who does not already know it
+                is there, and twelve bright pencils down a dense board is noise. Never
+                fully transparent, so it is still discoverable by looking.
+              */}
+              <button
+                type="button"
+                onClick={() => setDraft(headline)}
+                title={
+                  session.userName
+                    ? 'Rename — clear the field to go back to the generated title'
+                    : 'Name this row something you will recognise'
+                }
+                aria-label="Rename this row"
+                className="no-drag text-text-subtle hover:text-text hover:bg-surface-raised -my-1 shrink-0 cursor-pointer rounded p-1 opacity-40 transition-all group-hover/strip:opacity-100"
+              >
+                <Pencil size={12} aria-hidden />
+              </button>
+            </>
+          ) : (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              /* Blur commits, matching a filed plan's title. Escape abandons, and
+                 emptying the field clears the name back to the generated one — which is
+                 the only way back, so it has to be reachable from the same control. */
+              onBlur={() => {
+                void renameSession(session.sessionId, draft)
+                setDraft(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+                if (e.key === 'Escape') setDraft(null)
+              }}
+              placeholder="Empty to use the generated title"
+              aria-label="Name this row"
+              className="no-drag bg-surface border-accent min-w-0 flex-1 rounded border px-2 py-1 text-headline leading-6 font-medium outline-none"
+            />
+          )}
 
           <span
             title={`Last contact ${absoluteTime(session.lastContact)}`}

@@ -189,6 +189,7 @@ export async function collect(): Promise<SessionSnapshot> {
   }
 
   const readMarks = cache.readMarks()
+  const names = cache.sessionNames()
   const held = cache.heldSessions()
   const dismissed = cache.dismissedPrs()
   const prLinks = cache.prLinksBySession()
@@ -244,6 +245,7 @@ export async function collect(): Promise<SessionSnapshot> {
       // Resolved at click time by the provider (see cmux.focus), so this only
       // records whether tuning is plausible at all.
       location: entry ? { providerId: 'cmux', handle: sessionId, exact: true } : null,
+      userName: names.get(sessionId) ?? null,
       // Filled in below, once the row's PRs can be consulted.
       unread: false,
       held: held.has(sessionId),
@@ -292,6 +294,10 @@ export async function collect(): Promise<SessionSnapshot> {
    */
   const activity = new Map<string, number>()
   for (const session of sessions) {
+    // Both row kinds pass through here, which is the only place a name has to be
+    // applied for pull-request rows — they are created below the session loop.
+    session.userName = names.get(session.sessionId) ?? null
+
     const reviewedAt = session.prs.map(
       (pr) => prStatuses.get(prKey(pr.repository, pr.number))?.lastHumanReviewAt ?? null,
     )

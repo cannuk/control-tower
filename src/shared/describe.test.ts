@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { describeApproach, describePr } from './describe.js'
-import { headlinePr } from './types.js'
+import { headlinePr, rowHeadline } from './types.js'
 import type { PrRef, Session } from './types.js'
 
 /**
@@ -191,6 +191,7 @@ describe('a session with several open PRs', () => {
       gitDirty: false,
       summary: 's',
       summarySource: 'generated',
+      userName: null,
       sessionState: null,
       fallbackName: 'repo',
       transponder: 'idle',
@@ -248,6 +249,7 @@ describe('a parked PR row', () => {
       summarySource: 'generated' as const,
       sessionState: null,
       fallbackName: 'repo',
+      userName: null,
       transponder: 'idle' as const,
       lastContact: 0,
       startedAt: null,
@@ -274,6 +276,7 @@ describe('a parked PR row', () => {
       summarySource: 'generated' as const,
       sessionState: 'doing a thing',
       fallbackName: 'repo',
+      userName: null,
       transponder: 'idle' as const,
       lastContact: 0,
       startedAt: null,
@@ -393,5 +396,85 @@ describe('the four awaiting-review states', () => {
     expect(describePr(pr({ status: 'go-around', failingChecks: ['labels'] }))).toContain(
       'Failing labels',
     )
+  })
+})
+
+/**
+ * What a row is called.
+ *
+ * The precedence is the feature: a name you set has to survive every board and outrank
+ * the pull request's own title, or it is not a name — it is a label that disappears the
+ * moment the row moves somewhere you were not looking.
+ */
+describe('rowHeadline', () => {
+  function row(over: Partial<Session> = {}): Session {
+    return {
+      sessionId: 's',
+      origin: 'session' as const,
+      pid: null,
+      cwd: '/tmp',
+      project: 'repo',
+      gitBranch: null,
+      gitDirty: false,
+      summary: 'A generated summary',
+      summarySource: 'generated',
+      userName: null,
+      sessionState: null,
+      fallbackName: 'repo-aa',
+      transponder: 'idle',
+      lastContact: 0,
+      startedAt: null,
+      transcriptPath: null,
+      prs: [],
+      location: null,
+      unread: false,
+      held: false,
+      ...over,
+    }
+  }
+
+  it('prefers the name you set over a generated summary', () => {
+    expect(rowHeadline(row({ userName: 'the flaky test one' }), 'en-route')).toBe(
+      'the flaky test one',
+    )
+  })
+
+  it('prefers the name you set over the pull request title', () => {
+    // The part that makes it work across tabs. On APPROACH the PR title normally wins,
+    // and a name that lost here would mean the row you labelled is unrecognisable on
+    // the board you spend most time on.
+    const named = row({
+      userName: 'the flaky test one',
+      prs: [pr({ number: 7, title: 'Fix the retry backoff' })],
+    })
+    expect(rowHeadline(named, 'approach')).toBe('the flaky test one')
+    expect(rowHeadline(named, 'holding')).toBe('the flaky test one')
+    expect(rowHeadline(named, 'landed')).toBe('the flaky test one')
+    expect(rowHeadline(named, 'en-route')).toBe('the flaky test one')
+  })
+
+  it('falls back to the PR title on a PR-led board', () => {
+    const s = row({ prs: [pr({ number: 7, title: 'Fix the retry backoff' })] })
+    expect(rowHeadline(s, 'approach')).toBe('Fix the retry backoff')
+  })
+
+  it('falls back to the PR number when its title has not arrived', () => {
+    // Deferring to the session name here would make the row jump when the title lands.
+    const s = row({ prs: [pr({ number: 7, title: null })] })
+    expect(rowHeadline(s, 'approach')).toBe('#7')
+  })
+
+  it('uses the session summary where no PR leads', () => {
+    expect(rowHeadline(row(), 'en-route')).toBe('A generated summary')
+  })
+
+  it('never renders blank', () => {
+    expect(rowHeadline(row({ summary: null }), 'en-route')).toBe('repo-aa')
+  })
+
+  it('treats an empty name as no name, so a blank never wins', () => {
+    // The store trims to null before saving, but the rule must not depend on that:
+    // a stored '' would otherwise render an untitled strip with nothing to explain it.
+    expect(rowHeadline(row({ userName: '' }), 'en-route')).toBe('A generated summary')
   })
 })

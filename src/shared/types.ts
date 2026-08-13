@@ -199,6 +199,16 @@ export interface Session {
    */
   summarySource: 'provider' | 'generated' | 'heuristic' | null
   /**
+   * What you named this row, if you named it.
+   *
+   * Outranks every derived title, including the pull request's own on APPROACH and
+   * LANDED. Kept separate from `summary` rather than overwriting it because the two
+   * answer different questions and both stay useful: the summary is what the work is
+   * doing and moves as it moves, the name is what you call it and does not. Something
+   * you can recognise a week later is a different thing from an accurate description.
+   */
+  userName: string | null
+  /**
    * One or two sentences on where the session currently stands.
    *
    * Only shown on EN ROUTE, where the question is "what is happening here" rather
@@ -317,6 +327,30 @@ export function headlinePr(session: Session, board: Board): PrRef | null {
     )
   }
   return null
+}
+
+/**
+ * What a row is called, in precedence order.
+ *
+ * Four sources, and the order between them is the whole rule:
+ *
+ *   1. The name you gave it. Outranks everything, on every board — that is what makes
+ *      it the same recognisable row whether you find it on EN ROUTE or APPROACH, and
+ *      why it beats even the pull request's own title.
+ *   2. The headline PR's title, on the boards that have one. A PR with no title fetched
+ *      yet still leads and falls back to its number: deferring to the session name
+ *      would make the row jump the moment the title arrived.
+ *   3. The session summary, from whichever tier produced it.
+ *   4. The fallback name, so a strip is never blank.
+ *
+ * Extracted from the strip because it is a rule rather than markup, and a rule with
+ * four branches that renders in two different places is one worth pinning down.
+ */
+export function rowHeadline(session: Session, board: Board): string {
+  if (session.userName) return session.userName
+  const lead = headlinePr(session, board)
+  if (lead) return lead.title ?? `#${lead.number}`
+  return session.summary ?? session.fallbackName
 }
 
 /**

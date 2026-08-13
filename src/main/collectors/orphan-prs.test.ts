@@ -21,6 +21,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   gitDirty: false,
   summary: 's',
   summarySource: 'generated',
+  userName: null,
   sessionState: null,
   fallbackName: 's',
   transponder: 'idle',

@@ -98,6 +98,8 @@ export function prSession(pr: AuthoredPr, ref: PrRef, cwd: string | null): Sessi
     gitDirty: false,
     summary: ref.title ?? `#${pr.number}`,
     summarySource: null,
+    // Filled in by the snapshot, which owns the name table.
+    userName: null,
     sessionState: null,
     fallbackName: `#${pr.number}`,
     transponder: 'no-contact',

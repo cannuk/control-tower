@@ -25,6 +25,8 @@ const api = {
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
   tune: (sessionId: string, cwd: string): Promise<TuneResult> =>
     ipcRenderer.invoke('session:tune', sessionId, cwd),
+  renameSession: (sessionId: string, name: string | null): Promise<void> =>
+    ipcRenderer.invoke('session:rename', sessionId, name),
   markRead: (sessionId: string, at: number): Promise<void> =>
     ipcRenderer.invoke('session:markRead', sessionId, at),
   setHeld: (sessionId: string, held: boolean): Promise<void> =>

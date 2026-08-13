@@ -519,6 +519,61 @@ export function putGeneratedTitles(titles: GeneratedTitle[]): void {
 }
 
 /**
+ * What you have named each row.
+ *
+ * Durable for the same reason the read marks are: nothing on disk could reconstruct it.
+ * A generated summary describes what a session is doing and changes as it does; a name
+ * is what *you* call it, and the whole point is that it does not move. The pr_status
+ * schema bump drops only that table by name, so this survives every rebuild.
+ *
+ * Keyed on session id, which is also what makes it work across boards — the same row
+ * carries the name whether you are looking at EN ROUTE or APPROACH, and a pull-request
+ * row keys on its synthetic `pr:{repo}#{n}` id, which is equally stable.
+ */
+function ensureNameTable(): void {
+  open().exec(`
+    CREATE TABLE IF NOT EXISTS session_name (
+      session_id  TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      set_at      INTEGER NOT NULL
+    );
+  `)
+}
+
+/** session id -> the name you gave it. */
+export function sessionNames(): Map<string, string> {
+  ensureNameTable()
+  const rows = open().prepare('SELECT session_id, name FROM session_name').all() as {
+    session_id: string
+    name: string
+  }[]
+  return new Map(rows.map((r) => [r.session_id, r.name]))
+}
+
+/**
+ * Name a row, or clear the name by passing null.
+ *
+ * Trimmed, and an empty result clears rather than storing a blank: emptying the field
+ * is how you say "go back to the generated title", and a row named '' would show as
+ * an untitled strip with no way to tell it apart from a broken one.
+ */
+export function setSessionName(sessionId: string, name: string | null): void {
+  ensureNameTable()
+  const database = open()
+  const trimmed = name?.trim() ?? ''
+  if (trimmed.length === 0) {
+    database.prepare('DELETE FROM session_name WHERE session_id = ?').run(sessionId)
+    return
+  }
+  database
+    .prepare(
+      `INSERT INTO session_name (session_id, name, set_at) VALUES (?, ?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET name = excluded.name, set_at = excluded.set_at`,
+    )
+    .run(sessionId, trimmed, Date.now())
+}
+
+/**
  * When each session was last looked at.
  *
  * Not derivable from anything — it records what *you* have seen, so it belongs here

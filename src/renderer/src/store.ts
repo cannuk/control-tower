@@ -64,6 +64,7 @@ interface State {
   moveDeparture: (id: number, index: number) => Promise<void>
   setHeld: (sessionId: string, held: boolean) => Promise<void>
   dismissPr: (repository: string, number: number) => Promise<void>
+  renameSession: (sessionId: string, name: string | null) => Promise<void>
   markRead: (sessionId: string, at: number) => Promise<void>
   launchDeparture: (id: number) => Promise<string | null>
   bumpTick: () => void
@@ -259,6 +260,31 @@ export const useStore = create<State>((set, get) => ({
    * you do not need to look at — it would open a terminal to dismiss a dot. Applied
    * locally first so the dot changes on the click rather than on the next sweep.
    */
+  /**
+   * Name a row, or clear it with an empty string.
+   *
+   * Patched into the snapshot in place rather than triggering a sweep. The name is one
+   * field with no ordering attached, so there is no rule to duplicate here — and since
+   * every board is derived from this one snapshot, patching it renames the row on all
+   * of them at once, which is the point of naming it.
+   */
+  renameSession: async (sessionId, name) => {
+    const trimmed = name?.trim() ?? ''
+    const next = trimmed.length > 0 ? trimmed : null
+    const snapshot = get().snapshot
+    if (snapshot) {
+      set({
+        snapshot: {
+          ...snapshot,
+          sessions: snapshot.sessions.map((s) =>
+            s.sessionId === sessionId ? { ...s, userName: next } : s,
+          ),
+        },
+      })
+    }
+    await window.controlTower.renameSession(sessionId, next)
+  },
+
   markRead: async (sessionId, at) => {
     const snapshot = get().snapshot
     if (snapshot) {

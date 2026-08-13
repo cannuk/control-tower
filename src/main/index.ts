@@ -569,6 +569,17 @@ ipcMain.handle('prefs:clearLaunchRoot', () => {
 })
 
 /**
+ * Name a row, or clear the name with null or an empty string.
+ *
+ * No length cap: a name you chose is a name you chose, and the strip truncates what it
+ * cannot fit rather than the store deciding for you.
+ */
+ipcMain.handle('session:rename', (_e, sessionId: string, name: string | null) => {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return
+  cacheStore.setSessionName(sessionId, typeof name === 'string' ? name : null)
+})
+
+/**
  * Mark a session seen up to a moment.
  *
  * The timestamp comes from the renderer's snapshot rather than `Date.now()`, so a
