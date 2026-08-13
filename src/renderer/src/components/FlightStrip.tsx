@@ -40,9 +40,20 @@ import { StripAction } from './StripAction.js'
 export function FlightStrip({
   session,
   board,
+  onActivate,
 }: {
   session: Session
   board: Board
+  /**
+   * Called when tuning this row succeeds.
+   *
+   * Exists for the search results, which are a temporary view over every board: acting
+   * on a row there means you have found what you were looking for, so the search should
+   * get out of the way. Only on success, so a row that cannot be tuned keeps its place
+   * and its explanation — a session under VS Code reports why, and closing the view
+   * would take that message with it.
+   */
+  onActivate?: () => void
 }): React.JSX.Element {
   const dot = dotFor(session.transponder, session.unread)
   const { setHeld, markRead, dismissPr, renameSession } = useStore()
@@ -110,7 +121,11 @@ export function FlightStrip({
     // whether you have looked at the row.
     await seen()
     const result = await window.controlTower.tune(session.sessionId, session.cwd)
-    if (!result.ok) setTuneError(result.reason)
+    if (!result.ok) {
+      setTuneError(result.reason)
+      return
+    }
+    onActivate?.()
   }
 
   return (

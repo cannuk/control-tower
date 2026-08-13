@@ -19,6 +19,15 @@ interface State {
    */
   overlay: Overlay
   titling: boolean
+  /**
+   * The global search query, or null when the search field is closed.
+   *
+   * Two states rather than one, because an empty string is a real state: the field is
+   * open and waiting for you, which is different from not searching at all. Deliberately
+   * not persisted — a search is where you are looking right now, not a preference, and
+   * reopening the app into somebody else's half-typed query would be baffling.
+   */
+  query: string | null
   /** Where the directory picker opens, or null for wherever macOS last had it. */
   launchRoot: string | null
   /** How many rows each board holds, null meaning all — see DEFAULT_BOARD_LIMITS. */
@@ -53,6 +62,9 @@ interface State {
   chooseLaunchRoot: () => Promise<void>
   clearLaunchRoot: () => Promise<void>
   setBoard: (board: Board) => void
+  openSearch: () => void
+  setQuery: (query: string) => void
+  closeSearch: () => void
   refresh: (announce?: boolean) => Promise<void>
   loadDepartures: () => Promise<void>
   addDeparture: (title: string, notes: string | null, cwd: string | null) => Promise<boolean>
@@ -94,6 +106,7 @@ export const useStore = create<State>((set, get) => ({
   tick: 0,
   overlay: null,
   titling: true,
+  query: null,
   launchRoot: null,
   boardLimits: DEFAULT_BOARD_LIMITS,
   scanId: 0,
@@ -150,6 +163,25 @@ export const useStore = create<State>((set, get) => ({
   setBoard: (board) => {
     set({ board })
     void window.controlTower.setBoard(board)
+  },
+
+  /**
+   * Open the field, or focus it if it is already open.
+   *
+   * Opening to an empty string rather than to a remembered query: the field is a place
+   * to type, and inheriting the last search means the first keystroke lands in the
+   * middle of a word you have forgotten writing.
+   */
+  openSearch: () => {
+    set({ query: '' })
+  },
+
+  setQuery: (query) => {
+    set({ query })
+  },
+
+  closeSearch: () => {
+    set({ query: null })
   },
 
   loadDepartures: async () => {

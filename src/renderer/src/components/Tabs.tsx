@@ -1,3 +1,4 @@
+import { Search, X } from 'lucide-react'
 import type { Board } from '../../../shared/types.js'
 import { UNREAD_DOT } from '../lib/status.js'
 import { cn } from '../lib/utils.js'
@@ -70,6 +71,16 @@ export function Tabs({
       role="tablist"
       className="border-border-base flex h-[52px] shrink-0 items-center gap-1.5 border-b px-3"
     >
+      {/*
+        Search sits with the tabs but is not one of them. A row can be on any board, and
+        the whole reason to search is that you have forgotten which — a SEARCH tab would
+        ask you to pick a board first, which is the problem.
+
+        Leftmost, because when it is open it takes the bar over and a field that expands
+        rightwards from the middle shoves every tab as you type.
+      */}
+      <SearchControl />
+      <span aria-hidden className="bg-border-base mr-0.5 h-5 w-px shrink-0" />
       {boards.map(({ id, label, count, title }) => (
         <button
           key={id}
@@ -78,7 +89,7 @@ export function Tabs({
           title={unread[id] ? `${title} — new activity you have not opened` : title}
           onClick={() => setBoard(id)}
           className={cn(
-            'field relative rounded px-3.5 py-2.5 text-[11.5px] font-semibold tracking-wider transition-colors',
+            'field relative shrink-0 rounded px-3.5 py-2.5 text-[11.5px] font-semibold tracking-wider transition-colors',
             board === id ? 'bg-surface-raised text-text' : 'text-text-subtle hover:text-text',
           )}
         >
@@ -105,5 +116,62 @@ export function Tabs({
         </button>
       ))}
     </nav>
+  )
+}
+
+/**
+ * The magnifier, and the field it becomes.
+ *
+ * One control in two states rather than a permanent field: the bar has five tabs in it
+ * already, and a search box sitting empty on a dashboard is an invitation to a feature
+ * most glances do not need. Closed it is an icon; open it takes the space it needs.
+ *
+ * The tabs stay visible and clickable while it is open, so clicking a board is how you
+ * leave a search — the same gesture as going anywhere else, and one you would try
+ * anyway.
+ */
+function SearchControl(): React.JSX.Element {
+  const { query, openSearch, setQuery, closeSearch } = useStore()
+
+  if (query === null) {
+    return (
+      <button
+        type="button"
+        onClick={openSearch}
+        title="Search every board by title, summary or directory"
+        aria-label="Search"
+        className="text-text-subtle hover:text-text hover:bg-surface-raised shrink-0 rounded p-2 transition-colors"
+      >
+        <Search size={14} aria-hidden />
+      </button>
+    )
+  }
+
+  return (
+    <span className="bg-surface-raised ring-border flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 ring-1">
+      <Search size={13} aria-hidden className="text-text-subtle shrink-0" />
+      <input
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        // Escape closes rather than clearing: with an empty field those are the same
+        // keystroke twice, and an input you cannot get out of with Escape is a trap.
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') closeSearch()
+        }}
+        placeholder="Search titles and summaries…"
+        aria-label="Search every board"
+        className="text-text placeholder:text-text-subtle min-w-0 flex-1 bg-transparent py-2 text-ui outline-none"
+      />
+      <button
+        type="button"
+        onClick={closeSearch}
+        title="Close search"
+        aria-label="Close search"
+        className="text-text-subtle hover:text-text shrink-0 rounded p-1 transition-colors"
+      >
+        <X size={13} aria-hidden />
+      </button>
+    </span>
   )
 }
