@@ -27,6 +27,7 @@ export function App(): React.JSX.Element {
     boardLimits,
     query,
     locate,
+    markAllRead,
   } = useStore()
 
   useEffect(() => {
@@ -94,6 +95,7 @@ export function App(): React.JSX.Element {
    * the board it belongs to, so a trimmed row is found and correctly labelled LANDED.
    */
   const searching = query !== null && query.trim().length > 0
+  const unreadHere = strips.filter((s) => s.unread).length
   const hiddenByLimit =
     board === 'departures' ? 0 : trimmed[BOARD_KEY[board]] - (locatedOffBoard ? 1 : 0)
   const results = searching && unbounded ? search(unbounded, departures, query) : []
@@ -151,6 +153,27 @@ export function App(): React.JSX.Element {
           />
         )}
 
+        {/*
+          Only when there is something to clear, and only ever about this board. A
+          permanent control would be one more piece of furniture on a board that is
+          usually entirely read, and a global "clear everything" would dismiss rows on
+          boards you are not looking at — which is how an inbox stops meaning anything.
+        */}
+        {!searching && unreadHere > 0 && (
+          <div className="border-scope-line flex items-center justify-between gap-3 border-b px-4 py-2">
+            <span className="field text-text-subtle text-footnote tracking-wider">
+              {unreadHere} WITH NEW ACTIVITY
+            </span>
+            <button
+              type="button"
+              onClick={() => void markAllRead(strips)}
+              title="Clear the new-activity dot on every row shown here"
+              className="field no-drag text-text-muted hover:text-text hover:bg-surface-raised ring-border rounded px-2 py-1 text-footnote font-semibold tracking-wider ring-1 transition-colors"
+            >
+              MARK ALL READ
+            </button>
+          </div>
+        )}
 
         {!searching &&
           strips.map((session) => (

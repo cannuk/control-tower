@@ -617,6 +617,33 @@ export function markRead(sessionId: string, at: number): void {
 }
 
 /**
+ * Mark a whole board read in one transaction.
+ *
+ * A loop of single marks over IPC would work and would be wrong twice: twenty round
+ * trips for one gesture, and twenty separate commits, so a failure halfway leaves the
+ * board half-cleared with no way to tell which half. Each entry still carries its own
+ * timestamp — the point of a bulk clear is that it dismisses exactly what was on screen,
+ * not everything up to now.
+ */
+export function markManyRead(entries: { sessionId: string; at: number }[]): void {
+  if (entries.length === 0) return
+  ensureReadTable()
+  const database = open()
+  const insert = database.prepare(
+    `INSERT INTO session_read (session_id, read_at) VALUES (?, ?)
+     ON CONFLICT(session_id) DO UPDATE SET read_at = MAX(read_at, excluded.read_at)`,
+  )
+  database.exec('BEGIN')
+  try {
+    for (const e of entries) insert.run(e.sessionId, e.at)
+    database.exec('COMMIT')
+  } catch (cause) {
+    database.exec('ROLLBACK')
+    throw cause
+  }
+}
+
+/**
  * Give sessions we have never seen before a mark at their current activity.
  *
  * Without this, the first sweep after this feature ships would flag all hundred-odd

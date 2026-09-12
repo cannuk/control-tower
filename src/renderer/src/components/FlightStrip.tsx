@@ -138,7 +138,7 @@ export function FlightStrip({
    */
   async function seen(): Promise<void> {
     if (session.origin !== 'session') return
-    await window.controlTower.markRead(session.sessionId, session.lastContact)
+    await window.controlTower.markRead(session.sessionId, session.activityAt)
   }
 
   async function tune(): Promise<void> {
@@ -177,7 +177,7 @@ export function FlightStrip({
         {dot.kind === 'unread' ? (
           <button
             type="button"
-            onClick={() => void markRead(session.sessionId, session.lastContact)}
+            onClick={() => void markRead(session.sessionId, session.activityAt)}
             title={dot.label}
             aria-label="Clear new activity on this session"
             className="no-drag -m-1.5 shrink-0 cursor-pointer p-1.5"

@@ -55,6 +55,7 @@ function session(over: Partial<Session> = {}): Session {
     transcriptPath: '/tmp/t.jsonl',
     prs: [],
     location: null,
+    activityAt: 0,
     unread: false,
     held: false,
     ...over,

@@ -246,7 +246,8 @@ export async function collect(): Promise<SessionSnapshot> {
       // records whether tuning is plausible at all.
       location: entry ? { providerId: 'cmux', handle: sessionId, exact: true } : null,
       userName: names.get(sessionId) ?? null,
-      // Filled in below, once the row's PRs can be consulted.
+      // Both filled in below, once the row's PRs can be consulted.
+      activityAt: 0,
       unread: false,
       held: held.has(sessionId),
     })
@@ -303,6 +304,7 @@ export async function collect(): Promise<SessionSnapshot> {
     )
     const at = lastActivityAt(session.transcriptPath ? session.lastContact : null, reviewedAt)
     activity.set(session.sessionId, at)
+    session.activityAt = at
 
     /**
      * A row with no mark yet is *read*, not unread — it is seeded just below at

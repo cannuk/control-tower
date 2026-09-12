@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_BOARD_LIMITS, type BoardLimits } from '../../shared/boards.js'
-import type { Board, Departure, SessionSnapshot, ThemeName } from '../../shared/types.js'
+import type { Board, Departure, Session, SessionSnapshot, ThemeName } from '../../shared/types.js'
 
 interface State {
   theme: ThemeName
@@ -89,6 +89,7 @@ interface State {
   dismissPr: (repository: string, number: number) => Promise<void>
   renameSession: (sessionId: string, name: string | null) => Promise<void>
   markRead: (sessionId: string, at: number) => Promise<void>
+  markAllRead: (sessions: Session[]) => Promise<void>
   launchDeparture: (id: number) => Promise<string | null>
   bumpTick: () => void
   /** Open a panel, or pass the open one to close it. */
@@ -335,6 +336,35 @@ export const useStore = create<State>((set, get) => ({
       })
     }
     await window.controlTower.renameSession(sessionId, next)
+  },
+
+  /**
+   * Clear every unread row on one board.
+   *
+   * Takes the sessions the board is showing rather than a board name, so it dismisses
+   * exactly what you were looking at — a row hidden by a limit is not something you have
+   * read. Each row is marked at its own activity time for the same reason a single mark
+   * is: anything that arrives after the sweep you were reading stays unread.
+   */
+  markAllRead: async (sessions) => {
+    const entries = sessions
+      .filter((s) => s.unread)
+      .map((s) => ({ sessionId: s.sessionId, at: s.activityAt }))
+    if (entries.length === 0) return
+
+    const cleared = new Set(entries.map((e) => e.sessionId))
+    const snapshot = get().snapshot
+    if (snapshot) {
+      set({
+        snapshot: {
+          ...snapshot,
+          sessions: snapshot.sessions.map((s) =>
+            cleared.has(s.sessionId) ? { ...s, unread: false } : s,
+          ),
+        },
+      })
+    }
+    await window.controlTower.markManyRead(entries)
   },
 
   markRead: async (sessionId, at) => {

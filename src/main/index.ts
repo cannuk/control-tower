@@ -569,6 +569,20 @@ ipcMain.handle('prefs:clearLaunchRoot', () => {
 })
 
 /**
+ * Mark several rows read at once — the whole of one board.
+ *
+ * Each entry brings its own timestamp for the same reason a single mark does: it
+ * dismisses what the snapshot showed, not whatever has happened since.
+ */
+ipcMain.handle('session:markManyRead', (_e, entries: { sessionId: string; at: number }[]) => {
+  if (!Array.isArray(entries)) return
+  const clean = entries.filter(
+    (e) => typeof e?.sessionId === 'string' && e.sessionId.length > 0 && Number.isFinite(e.at),
+  )
+  cacheStore.markManyRead(clean)
+})
+
+/**
  * Name a row, or clear the name with null or an empty string.
  *
  * No length cap: a name you chose is a name you chose, and the strip truncates what it

@@ -228,6 +228,19 @@ export interface Session {
   prs: PrRef[]
   location: SessionLocation | null
   /** New activity since you last opened it. Drives the dot and the tab dots. */
+  /**
+   * The moment this row was last touched by anything that counts as activity.
+   *
+   * The newer of the transcript's last real message and the last human review on any of
+   * its pull requests — exactly the value `unread` is derived from, which is why it has
+   * to travel with the row rather than being recomputed.
+   *
+   * Marking a row read has to use *this*, not `lastContact`. It did use lastContact, and
+   * on any row whose pull request had been reviewed since the terminal went quiet the
+   * mark landed below the activity it was meant to clear. Marks are monotonic, so those
+   * rows could never be marked read at all: four of them were permanently lit.
+   */
+  activityAt: number
   unread: boolean
   /**
    * Parked by you, deliberately.

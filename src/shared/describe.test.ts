@@ -200,6 +200,7 @@ describe('a session with several open PRs', () => {
       transcriptPath: null,
       prs,
       location: null,
+      activityAt: 0,
       unread: false,
       held: false,
     }
@@ -256,6 +257,7 @@ describe('a parked PR row', () => {
       transcriptPath: null,
       prs: [pr({ number: 12, humanReviewed: true, title: 'The pull request name' })],
       location: null,
+      activityAt: 0,
       unread: false,
       held: true,
     }
@@ -283,6 +285,7 @@ describe('a parked PR row', () => {
       transcriptPath: null,
       prs: [],
       location: null,
+      activityAt: 0,
       unread: false,
       held: true,
     }
@@ -427,6 +430,7 @@ describe('rowHeadline', () => {
       transcriptPath: null,
       prs: [],
       location: null,
+      activityAt: 0,
       unread: false,
       held: false,
       ...over,

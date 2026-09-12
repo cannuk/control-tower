@@ -30,6 +30,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   transcriptPath: '/t.jsonl',
   prs: [],
   location: null,
+  activityAt: 0,
   unread: false,
   held: false,
   ...over,

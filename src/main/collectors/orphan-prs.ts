@@ -109,6 +109,8 @@ export function prSession(pr: AuthoredPr, ref: PrRef, cwd: string | null): Sessi
     transcriptPath: null,
     prs: [ref],
     location: null,
+    // Both settled by the snapshot, which owns the read marks.
+    activityAt: 0,
     unread: false,
     held: false,
   }
