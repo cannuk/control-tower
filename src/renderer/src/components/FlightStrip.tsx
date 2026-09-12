@@ -5,6 +5,7 @@ import {
   PauseCircle,
   Pencil,
   PlayCircle,
+  TerminalSquare,
   TriangleAlert,
   X,
 } from 'lucide-react'
@@ -331,6 +332,31 @@ export function FlightStrip({
           <p className="text-caution mt-2.5 flex items-start gap-1.5 text-prose leading-snug">
             <TriangleAlert size={12} className="mt-0.5 shrink-0" aria-hidden />
             {tuneError}
+          </p>
+        )}
+
+        {/*
+          Shipped, but the terminal is still running.
+          
+          LANDED only. Everywhere else a live process is the normal state and worth
+          nothing; here it is the one thing left to do, and it is invisible otherwise —
+          the board reads as "finished", and a session left open after its pull request
+          merged is exactly the one you forget. The dot already encodes liveness, but
+          reading it requires knowing the dot vocabulary and noticing the absence of a
+          hollow ring, which is not how anyone scans a board they consider done.
+
+          Says which state it is in, because it changes what closing it costs: an idle
+          session is safe to quit, one mid-turn is doing something.
+        */}
+        {board === 'landed' && session.transponder !== 'no-contact' && (
+          <p className="text-caution mt-2.5 flex items-start gap-1.5 text-prose leading-snug">
+            <TerminalSquare size={12} className="mt-0.5 shrink-0" aria-hidden />
+            <span>
+              Terminal still open
+              {session.transponder === 'airborne' ? ' and mid-turn' : ' and idle'}
+              {session.pid === null ? '' : ` (pid ${session.pid})`} — merged, so this one can
+              probably be closed. Click the title to go to it.
+            </span>
           </p>
         )}
 
