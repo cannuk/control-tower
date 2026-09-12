@@ -26,6 +26,7 @@ export function App(): React.JSX.Element {
     departures,
     boardLimits,
     query,
+    locate,
   } = useStore()
 
   useEffect(() => {
@@ -59,7 +60,30 @@ export function App(): React.JSX.Element {
   const { enRoute, holding, approach, landed, olderCount, collapsed, trimmed } = boards
   const folded =
     board === 'approach' ? collapsed.approach : board === 'landed' ? collapsed.landed : 0
-  const strips = sessionsOn(boards, board)
+
+  /**
+   * Every row on every board, ignoring the limits.
+   *
+   * Two callers need it and for the same reason: search finds rows the limits hide, so
+   * anything downstream of a search has to be able to see them too.
+   */
+  const unbounded =
+    query !== null || locate !== null ? splitByBoard(snapshot, UNBOUNDED_LIMITS) : null
+
+  /**
+   * A located row is shown even when its board's limit would hide it.
+   *
+   * Otherwise clicking a search result could land you on a board that does not contain
+   * the row you clicked — the exact rows search exists to surface are the ones a limit
+   * has trimmed, so that would be the most likely way to meet this feature. Appended
+   * rather than inserted in order, which is truthful: it is past the cut.
+   */
+  const shown = sessionsOn(boards, board)
+  const locatedOffBoard =
+    locate && board !== 'departures' && !shown.some((s) => s.sessionId === locate) && unbounded
+      ? (sessionsOn(unbounded, board).find((s) => s.sessionId === locate) ?? null)
+      : null
+  const strips = locatedOffBoard ? [...shown, locatedOffBoard] : shown
 
   /**
    * Search results, classified with the limits removed.
@@ -70,13 +94,9 @@ export function App(): React.JSX.Element {
    * the board it belongs to, so a trimmed row is found and correctly labelled LANDED.
    */
   const searching = query !== null && query.trim().length > 0
-  const results = searching
-    ? search(
-        splitByBoard(snapshot, { enRoute: null, holding: null, approach: null, landed: null }),
-        departures,
-        query,
-      )
-    : []
+  const hiddenByLimit =
+    board === 'departures' ? 0 : trimmed[BOARD_KEY[board]] - (locatedOffBoard ? 1 : 0)
+  const results = searching && unbounded ? search(unbounded, departures, query) : []
 
   return (
     <div className="bg-bg text-text relative flex h-full flex-col overflow-hidden">
@@ -131,6 +151,7 @@ export function App(): React.JSX.Element {
           />
         )}
 
+
         {!searching &&
           strips.map((session) => (
             <FlightStrip key={session.sessionId} session={session} board={board} />
@@ -145,10 +166,10 @@ export function App(): React.JSX.Element {
           </p>
         )}
 
-        {!searching && board !== 'departures' && trimmed[BOARD_KEY[board]] > 0 && (
+        {!searching && board !== 'departures' && hiddenByLimit > 0 && (
           <p className="text-text-subtle field border-scope-line border-t px-3 py-3 text-footnote">
-            {trimmed[BOARD_KEY[board]]} MORE NOT SHOWN — THIS BOARD IS SET TO HOLD {strips.length}.
-            RAISE IT IN PREFERENCES.
+            {hiddenByLimit} MORE NOT SHOWN — THIS BOARD IS SET TO HOLD {shown.length}. RAISE IT IN
+            PREFERENCES.
           </p>
         )}
 
@@ -168,6 +189,9 @@ export function App(): React.JSX.Element {
     </div>
   )
 }
+
+/** Classification with every limit lifted — see `unbounded` in App. */
+const UNBOUNDED_LIMITS = { enRoute: null, holding: null, approach: null, landed: null }
 
 /**
  * Tab name to limits key. Only the four inferred boards have limits — DEPARTURES is a
@@ -272,7 +296,7 @@ function Results({
   results: SearchResult[]
   query: string
 }): React.JSX.Element {
-  const { closeSearch, setBoard } = useStore()
+  const { closeSearch, setBoard, locateRow } = useStore()
 
   /**
    * Acting on a result ends the search, and lands you on that row's own board.
@@ -282,9 +306,10 @@ function Results({
    * told you which board it was on; this takes you there, so the row is on screen where
    * the label said it would be.
    */
-  const leave = (board: Board) => () => {
+  const leave = (board: Board, sessionId?: string) => () => {
     closeSearch()
     setBoard(board)
+    if (sessionId) locateRow(sessionId)
   }
 
   if (results.length === 0) {
@@ -318,7 +343,7 @@ function Results({
             <FlightStrip
               session={result.session}
               board={result.board}
-              onActivate={leave(result.board)}
+              onActivate={leave(result.board, result.session.sessionId)}
             />
           ) : (
             /* A filed plan has no strip of its own — DEPARTURES renders its whole list

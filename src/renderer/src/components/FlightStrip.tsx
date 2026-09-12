@@ -1,5 +1,13 @@
-import { useState } from 'react'
-import { GitBranch, MapPin, PauseCircle, Pencil, PlayCircle, TriangleAlert, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  GitBranch,
+  MapPin,
+  PauseCircle,
+  Pencil,
+  PlayCircle,
+  TriangleAlert,
+  X,
+} from 'lucide-react'
 import { describeApproach } from '../../../shared/describe.js'
 import {
   headlinePr,
@@ -56,9 +64,27 @@ export function FlightStrip({
   onActivate?: () => void
 }): React.JSX.Element {
   const dot = dotFor(session.transponder, session.unread)
-  const { setHeld, markRead, dismissPr, renameSession } = useStore()
+  const { setHeld, markRead, dismissPr, renameSession, locate, clearLocate } = useStore()
   const [tuneError, setTuneError] = useState<string | null>(null)
   const [draft, setDraft] = useState<string | null>(null)
+
+  /**
+   * Bring this row forward when it is the one you just opened from a search.
+   *
+   * Scrolled to the middle rather than merely into view: a row that lands hard against
+   * the top or bottom edge of the rack reads as the end of the list rather than as the
+   * thing that was found. The mark is released immediately after — it has done its job
+   * by the time the flash starts, and leaving it set would scroll the board again every
+   * time you came back to this tab.
+   */
+  const located = locate === session.sessionId
+  const row = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!located) return
+    row.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const done = setTimeout(clearLocate, 1800)
+    return () => clearTimeout(done)
+  }, [located, clearLocate])
 
   const lead = headlinePr(session, board)
   const sessionName = session.summary ?? session.fallbackName
@@ -129,7 +155,13 @@ export function FlightStrip({
   }
 
   return (
-    <article className="border-scope-line hover:bg-surface-raised group/strip flex gap-4 border-b px-4 py-5 transition-colors">
+    <article
+      ref={row}
+      className={cn(
+        'border-scope-line hover:bg-surface-raised group/strip flex gap-4 border-b px-4 py-5 transition-colors',
+        located && 'row-locate',
+      )}
+    >
       {/* Fixed gutter — the squawk is always four characters in a monospaced
           face, so this column is the same width on every strip. */}
       <div className="flex w-[4rem] shrink-0 items-center gap-2.5 pt-0.5">

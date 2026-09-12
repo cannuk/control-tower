@@ -279,6 +279,37 @@
   }
 
   /*
+   * The row you just came from a search to find, announcing itself once.
+   *
+   * Needed because the board it lands on can hold twenty rows and the one you chose is
+   * rarely at the top: scrolling to it is necessary and not sufficient, since arriving
+   * mid-list gives no clue which of the visible rows was the point.
+   *
+   * An inset ring rather than a border or an outline, so it cannot shift the row by a
+   * pixel or overlap its neighbours — the rack's alignment is the thing that makes it
+   * scannable, and a locate effect that nudges rows sideways breaks the property it is
+   * trying to exploit. It fades to nothing and holds there: a permanent highlight would
+   * become one more piece of state to dismiss.
+   */
+  @keyframes row-locate {
+    0% {
+      box-shadow: inset 0 0 0 2px var(--ct-accent);
+      background-color: color-mix(in oklab, var(--ct-accent) 12%, transparent);
+    }
+    35% {
+      box-shadow: inset 0 0 0 2px var(--ct-accent);
+      background-color: color-mix(in oklab, var(--ct-accent) 12%, transparent);
+    }
+    100% {
+      box-shadow: inset 0 0 0 0 transparent;
+      background-color: transparent;
+    }
+  }
+  .row-locate {
+    animation: row-locate 1800ms ease-out forwards;
+  }
+
+  /*
    * A slow throb, for the two places the subject is an icon rather than a target: the
    * sweep glyph while a scan runs, and an in-progress status chip. A blip's expanding
    * ring belongs to a point return and reads as noise around a shape that already has

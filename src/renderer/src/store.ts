@@ -20,6 +20,15 @@ interface State {
   overlay: Overlay
   titling: boolean
   /**
+   * A row to bring to the front of the window, once.
+   *
+   * Set when you act on a search result: the terminal comes forward, and the board this
+   * app is showing should agree with it rather than leaving you to find the row again on
+   * a tab you have just been moved to. Cleared as soon as the row has announced itself,
+   * so returning to the tab later does not scroll you somewhere you did not ask for.
+   */
+  locate: string | null
+  /**
    * The global search query, or null when the search field is closed.
    *
    * Two states rather than one, because an empty string is a real state: the field is
@@ -62,6 +71,8 @@ interface State {
   chooseLaunchRoot: () => Promise<void>
   clearLaunchRoot: () => Promise<void>
   setBoard: (board: Board) => void
+  locateRow: (sessionId: string) => void
+  clearLocate: () => void
   openSearch: () => void
   setQuery: (query: string) => void
   closeSearch: () => void
@@ -106,6 +117,7 @@ export const useStore = create<State>((set, get) => ({
   tick: 0,
   overlay: null,
   titling: true,
+  locate: null,
   query: null,
   launchRoot: null,
   boardLimits: DEFAULT_BOARD_LIMITS,
@@ -172,6 +184,14 @@ export const useStore = create<State>((set, get) => ({
    * to type, and inheriting the last search means the first keystroke lands in the
    * middle of a word you have forgotten writing.
    */
+  locateRow: (sessionId) => {
+    set({ locate: sessionId })
+  },
+
+  clearLocate: () => {
+    set({ locate: null })
+  },
+
   openSearch: () => {
     set({ query: '' })
   },
