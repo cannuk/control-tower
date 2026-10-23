@@ -421,7 +421,22 @@ export const useStore = create<State>((set, get) => ({
    * Take pushed sweeps from the watcher. The initial paint still uses a pull so
    * the board is populated before the first file event, which on a quiet machine
    * could otherwise be minutes away.
+   *
+   * DEPARTURES is reloaded alongside, because rows can be filed from outside the app
+   * (the `ct-departure` skill writes straight to the store). The session filing one
+   * writes its transcript as it does, so the sweep that follows carries the new row
+   * in; focus covers the case where nothing else on the machine is moving.
    */
-  subscribe: () =>
-    window.controlTower.onSnapshot((snapshot) => set({ snapshot, loading: false, error: null })),
+  subscribe: () => {
+    const reload = (): void => void get().loadDepartures()
+    const unsubscribe = window.controlTower.onSnapshot((snapshot) => {
+      set({ snapshot, loading: false, error: null })
+      reload()
+    })
+    window.addEventListener('focus', reload)
+    return () => {
+      unsubscribe()
+      window.removeEventListener('focus', reload)
+    }
+  },
 }))
