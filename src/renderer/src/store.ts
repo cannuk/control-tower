@@ -136,7 +136,7 @@ export const useStore = create<State>((set, get) => ({
       ])
       applyTheme(theme)
       set({ theme, titling, board, boardLimits, launchRoot })
-      await Promise.all([get().refresh(false), get().loadDepartures()])
+      await get().refresh(false)
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
     }
@@ -278,7 +278,11 @@ export const useStore = create<State>((set, get) => ({
       // `announce` doubles as "a person asked for this", which is also exactly when
       // PR status is worth re-fetching. The silent startup sweep skips it so the
       // first paint does not wait on the network.
-      const snapshot = await window.controlTower.getSnapshot(announce)
+      // Departures ride along so a rescan also picks up plans filed from outside the app.
+      const [snapshot] = await Promise.all([
+        window.controlTower.getSnapshot(announce),
+        get().loadDepartures(),
+      ])
       set({ snapshot, loading: false, error: null })
     } catch (cause) {
       set({ error: cause instanceof Error ? cause.message : String(cause), loading: false })
